@@ -1,5 +1,3 @@
-// 예약 날짜 선택 페이지 로직
-
 let currentTime = null;
 let currentOperator = null;
 let reservedDates = [];
@@ -21,15 +19,19 @@ async function loadReservationData() {
         currentTime = await getRecord('times', timeId);
         currentOperator = await getRecord('operators', operatorId);
 
+        if (!currentTime || !currentOperator) {
+            showError('dateGrid', '타임 또는 술자 정보를 찾을 수 없습니다.');
+            return;
+        }
+
         try {
             const allReservations = await getData('reservations', {
                 operator_id: operatorId,
-                limit: 1000
+                limit: 5000
             });
 
             reservedDates = allReservations.map(r => r.reservation_date);
-        } catch (reservationError) {
-            console.warn('예약 데이터 로드 실패:', reservationError);
+        } catch (error) {
             reservedDates = [];
         }
 
@@ -44,8 +46,7 @@ async function loadReservationData() {
 function displayReservationInfo() {
     document.getElementById('operatorTitle').textContent = `${currentOperator.name} 학생`;
 
-    const timeInfo = document.getElementById('timeInfo');
-    timeInfo.innerHTML = `
+    document.getElementById('timeInfo').innerHTML = `
         <h3 style="color: var(--primary-color); margin-bottom: 15px;">${currentTime.name}</h3>
         <p><strong>요일:</strong> ${currentTime.day_of_week}요일</p>
         <p><strong>시간:</strong> ${currentTime.time_range}</p>
@@ -93,17 +94,18 @@ function selectDate(date, buttonElement) {
         btn.classList.remove('selected');
     });
 
-    if (buttonElement) buttonElement.classList.add('selected');
+    if (buttonElement) {
+        buttonElement.classList.add('selected');
+    }
 
     showConfirmationModal();
 }
 
 function showConfirmationModal() {
-    const confirmContent = document.getElementById('confirmContent');
     const timeName = sessionStorage.getItem('selectedTimeName');
     const operatorName = sessionStorage.getItem('selectedOperatorName');
 
-    confirmContent.innerHTML = `
+    document.getElementById('confirmContent').innerHTML = `
         <p><strong>${formatDateDisplay(selectedDate)}</strong></p>
         <p><strong>${timeName}</strong></p>
         <p><strong>${operatorName}</strong> 학생에게</p>
