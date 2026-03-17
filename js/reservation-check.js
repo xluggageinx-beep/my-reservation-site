@@ -17,22 +17,26 @@ async function checkReservations() {
     const codeInput = document.getElementById('codeInput').value.trim();
 
     if (!nameInput) {
-        alert('이름/타임 이름/관리자를 입력해주세요.');
+        alert('이름 또는 타임 이름을 입력해주세요.');
         return;
     }
 
     if (!codeInput) {
-        alert('학번/패스워드를 입력해주세요.');
+        alert('학번 또는 패스워드를 입력해주세요.');
         return;
     }
 
     try {
         console.log('예약 확인 시작...');
-        allTimes = await getData('times', { limit: 1000, order: 'created_at.asc,name.asc' });
-        allOperators = await getData('operators', { limit: 1000, order: 'created_at.asc,name.asc' });
+
+        allTimes = await getData('times', { limit: 1000 });
+        allOperators = await getData('operators', { limit: 1000 });
 
         try {
-            currentReservations = await getData('reservations', { limit: 5000, order: 'reservation_date.asc' });
+            currentReservations = await getData('reservations', {
+                limit: 5000,
+                order: 'reservation_date.asc'
+            });
         } catch (error) {
             console.warn('예약 데이터 로드 실패:', error);
             currentReservations = [];
@@ -42,7 +46,7 @@ async function checkReservations() {
         console.log('operators:', allOperators.length);
         console.log('reservations:', currentReservations.length);
 
-        // 관리자 모드
+        // 관리자 모드 (히든)
         if (nameInput === ADMIN_KEYWORD && codeInput === RS_PASSWORD) {
             viewMode = 'admin';
             displayAdminView();
@@ -86,7 +90,7 @@ async function checkReservations() {
 function displayAdminView() {
     document.getElementById('viewerInfo').innerHTML = `
         <p style="font-size: 1.2em; margin: 0;">
-            <strong>🔑 전체 관리자</strong>
+            <strong>예약 전체 관리</strong>
         </p>
         <p style="margin: 10px 0 0 0; color: var(--text-light);">
             모든 타임의 전체 예약 내역
@@ -351,7 +355,10 @@ async function confirmCancelReservation() {
         closeCancelModal();
 
         try {
-            currentReservations = await getData('reservations', { limit: 5000, order: 'reservation_date.asc' });
+            currentReservations = await getData('reservations', {
+                limit: 5000,
+                order: 'reservation_date.asc'
+            });
         } catch (error) {
             console.error('예약 목록 재로드 오류:', error);
             currentReservations = [];
