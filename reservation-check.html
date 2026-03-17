@@ -47,7 +47,14 @@
                     <h4 id="viewerInfo"></h4>
                 </div>
 
-                <h3 style="color: var(--primary-color); margin-bottom: 20px;" id="listTitle">예약 목록</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <h3 style="color: var(--primary-color); margin: 0;" id="listTitle">예약 목록</h3>
+
+                    <div id="exportButtonWrap" style="display: none;">
+                        <button class="btn btn-secondary" onclick="downloadReservationsCsv()">예약 목록 다운로드</button>
+                    </div>
+                </div>
+
                 <div id="reservationsList"></div>
 
                 <div class="button-group" style="margin-top: 30px;">
