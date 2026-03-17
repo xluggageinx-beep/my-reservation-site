@@ -21,11 +21,6 @@ async function loadReservationData() {
         currentTime = await getRecord('times', timeId);
         currentOperator = await getRecord('operators', operatorId);
 
-        if (!currentTime || !currentOperator) {
-            showError('dateGrid', '타임 또는 술자 정보를 찾을 수 없습니다.');
-            return;
-        }
-
         try {
             const allReservations = await getData('reservations', {
                 operator_id: operatorId,
@@ -34,7 +29,7 @@ async function loadReservationData() {
 
             reservedDates = allReservations.map(r => r.reservation_date);
         } catch (reservationError) {
-            console.warn('예약 데이터 로드 실패 (빈 목록으로 진행):', reservationError);
+            console.warn('예약 데이터 로드 실패:', reservationError);
             reservedDates = [];
         }
 
@@ -47,26 +42,18 @@ async function loadReservationData() {
 }
 
 function displayReservationInfo() {
-    const title = document.getElementById('operatorTitle');
+    document.getElementById('operatorTitle').textContent = `${currentOperator.name} 학생`;
+
     const timeInfo = document.getElementById('timeInfo');
-
-    if (title) {
-        title.textContent = `${currentOperator.name} 학생`;
-    }
-
-    if (timeInfo) {
-        timeInfo.innerHTML = `
-            <h3 style="color: var(--primary-color); margin-bottom: 15px;">${currentTime.name}</h3>
-            <p><strong>요일:</strong> ${currentTime.day_of_week}요일</p>
-            <p><strong>시간:</strong> ${currentTime.time_range}</p>
-        `;
-    }
+    timeInfo.innerHTML = `
+        <h3 style="color: var(--primary-color); margin-bottom: 15px;">${currentTime.name}</h3>
+        <p><strong>요일:</strong> ${currentTime.day_of_week}요일</p>
+        <p><strong>시간:</strong> ${currentTime.time_range}</p>
+    `;
 }
 
 function displayAvailableDates() {
     const dateGrid = document.getElementById('dateGrid');
-    if (!dateGrid) return;
-
     dateGrid.innerHTML = '';
 
     if (!currentTime.selected_dates || currentTime.selected_dates.length === 0) {
@@ -106,9 +93,7 @@ function selectDate(date, buttonElement) {
         btn.classList.remove('selected');
     });
 
-    if (buttonElement) {
-        buttonElement.classList.add('selected');
-    }
+    if (buttonElement) buttonElement.classList.add('selected');
 
     showConfirmationModal();
 }
@@ -118,14 +103,12 @@ function showConfirmationModal() {
     const timeName = sessionStorage.getItem('selectedTimeName');
     const operatorName = sessionStorage.getItem('selectedOperatorName');
 
-    if (confirmContent) {
-        confirmContent.innerHTML = `
-            <p><strong>${formatDateDisplay(selectedDate)}</strong></p>
-            <p><strong>${timeName}</strong></p>
-            <p><strong>${operatorName}</strong> 학생에게</p>
-            <p>예약하시겠습니까?</p>
-        `;
-    }
+    confirmContent.innerHTML = `
+        <p><strong>${formatDateDisplay(selectedDate)}</strong></p>
+        <p><strong>${timeName}</strong></p>
+        <p><strong>${operatorName}</strong> 학생에게</p>
+        <p>예약하시겠습니까?</p>
+    `;
 
     showModal('confirmModal');
 }
@@ -155,13 +138,7 @@ async function confirmReservation() {
     const timeId = sessionStorage.getItem('selectedTimeId');
     const operatorId = sessionStorage.getItem('selectedOperatorId');
 
-    if (!participantName || !participantPhone || !timeId || !operatorId) {
-        alert('예약 정보가 누락되었습니다. 처음부터 다시 진행해주세요.');
-        return;
-    }
-
     try {
-        // 1) 동일 술자/동일 날짜 중복 방지
         const sameSlotReservations = await getData('reservations', {
             operator_id: operatorId,
             reservation_date: selectedDate,
@@ -175,7 +152,6 @@ async function confirmReservation() {
             return;
         }
 
-        // 2) 한 대상자는 다른 술자 중복 예약 불가
         const myReservations = await getData('reservations', {
             participant_phone: participantPhone,
             limit: 100
