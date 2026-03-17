@@ -1,5 +1,3 @@
-// 술자 선택 페이지 로직
-
 let times = [];
 let operators = [];
 let reservations = [];
@@ -7,15 +5,12 @@ let reservations = [];
 const dayOrder = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5 };
 
 async function loadTimesAndOperators() {
-    const container = document.getElementById('timesContainer');
-    if (!container) return;
-
     showLoading('timesContainer');
 
     try {
         times = await getData('times', {
-            order: 'day_of_week.asc,name.asc',
-            limit: 100
+            order: 'created_at.asc,name.asc',
+            limit: 1000
         });
 
         operators = await getData('operators', {
@@ -24,11 +19,8 @@ async function loadTimesAndOperators() {
         });
 
         try {
-            reservations = await getData('reservations', {
-                limit: 1000
-            });
-        } catch (reservationError) {
-            console.warn('예약 데이터 로드 실패:', reservationError);
+            reservations = await getData('reservations', { limit: 5000 });
+        } catch (error) {
             reservations = [];
         }
 
@@ -45,7 +37,7 @@ async function loadTimesAndOperators() {
         displayTimesAndOperators();
     } catch (error) {
         console.error('데이터 로드 오류:', error);
-        showError('timesContainer', '데이터를 불러오는 중 오류가 발생했습니다. 페이지를 새로고침 해주세요.');
+        showError('timesContainer', '데이터를 불러오는 중 오류가 발생했습니다.');
     }
 }
 
@@ -71,8 +63,6 @@ function sortTimes(timesArray) {
 
 function displayTimesAndOperators() {
     const container = document.getElementById('timesContainer');
-    if (!container) return;
-
     container.innerHTML = '';
 
     const sortedTimes = sortTimes([...times]);
@@ -80,7 +70,6 @@ function displayTimesAndOperators() {
 
     sortedTimes.forEach(time => {
         let timeOperators = operators.filter(op => op.time_id === time.id);
-
         if (timeOperators.length === 0) return;
 
         hasVisibleTime = true;
@@ -91,10 +80,10 @@ function displayTimesAndOperators() {
             return aCreated - bCreated;
         });
 
-        const timeCard = document.createElement('div');
-        timeCard.className = 'time-card';
+        const card = document.createElement('div');
+        card.className = 'time-card';
 
-        timeCard.innerHTML = `
+        card.innerHTML = `
             <h3>${time.name}</h3>
             <div class="time-info">
                 <p><strong>요일:</strong> ${time.day_of_week}요일</p>
@@ -104,21 +93,22 @@ function displayTimesAndOperators() {
             <div class="operator-list" id="operators-${time.id}"></div>
         `;
 
-        container.appendChild(timeCard);
+        container.appendChild(card);
 
         const operatorList = document.getElementById(`operators-${time.id}`);
+
         timeOperators.forEach(operator => {
-            const operatorItem = document.createElement('div');
-            operatorItem.className = 'operator-item';
-            operatorItem.innerHTML = `<h4>${operator.name}</h4>`;
-            operatorItem.onclick = () => selectOperator(time.id, operator.id, time.name, operator.name);
-            operatorList.appendChild(operatorItem);
+            const item = document.createElement('div');
+            item.className = 'operator-item';
+            item.innerHTML = `<h4>${operator.name}</h4>`;
+            item.onclick = () => selectOperator(time.id, operator.id, time.name, operator.name);
+            operatorList.appendChild(item);
         });
     });
 
     if (!hasVisibleTime) {
         container.innerHTML = `
-            <div class="notice-box" style="text-align: center; padding: 40px;">
+            <div class="notice-box" style="text-align:center; padding:40px;">
                 <p>현재 선택 가능한 술자가 없습니다.<br>관리자에게 문의해주세요.</p>
             </div>
         `;
