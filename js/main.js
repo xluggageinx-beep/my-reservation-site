@@ -4,7 +4,6 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // 공통 API 호출 함수 (Supabase REST API 방식)
 async function fetchAPI(endpoint, options = {}) {
-    // 젠스파크 방식(tables/...)에서 Supabase 방식(rest/v1/...)으로 주소 변경
     const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
     const headers = {
         "apikey": SUPABASE_KEY,
@@ -20,37 +19,51 @@ async function fetchAPI(endpoint, options = {}) {
         throw new Error(`DB 연결 실패: ${response.status}`);
     }
     
-    // 데이터가 없는 경우(204 No Content) 처리
     if (response.status === 204) return null;
     return await response.json();
 }
 
-// 데이터를 가져오는 함수 (필터링 포함)
+// 데이터를 가져오는 함수
 async function getData(table, params = {}) {
     let query = "";
-    // id 파라미터가 있으면 Supabase 필터링 문법(?id=eq.값) 사용
     if (params.id) {
         query = `?id=eq.${params.id}`;
     }
-    return await fetchAPI(table + query);
+    // Supabase는 데이터를 배열로 바로 반환하므로 .data 처리를 없앱니다.
+    const result = await fetchAPI(table + query);
+    return result; 
 }
 
-// 단일 레코드 가져오기 (배열의 첫 번째 요소 반환)
+// 단일 레코드 가져오기
 async function getRecord(table, id) {
     const data = await getData(table, { id });
     return (data && data.length > 0) ? data[0] : null;
 }
 
-// 예약 정보 저장 (POST 요청)
-async function createRecord(table, data) {
+// 데이터 생성 (POST)
+async function createData(table, data) {
     return await fetchAPI(table, {
         method: 'POST',
         body: JSON.stringify(data)
     });
 }
 
-// --- 아래는 웹 화면 UI 관련 기존 함수들 (그대로 유지) ---
+// 데이터 수정 (PATCH)
+async function updateData(table, id, data) {
+    return await fetchAPI(`${table}?id=eq.${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data)
+    });
+}
 
+// 데이터 삭제 (DELETE)
+async function deleteData(table, id) {
+    return await fetchAPI(`${table}?id=eq.${id}`, {
+        method: 'DELETE'
+    });
+}
+
+// --- 아래는 기존 UI 함수 (그대로 유지) ---
 function showLoading(containerId) {
     const container = document.getElementById(containerId);
     if (container) {
@@ -61,9 +74,38 @@ function showLoading(containerId) {
 function showError(containerId, message) {
     const container = document.getElementById(containerId);
     if (container) {
-        container.innerHTML = `<div class="warning-box" style="text-align: center;"><p>${message}</p></div>`;
+        container.innerHTML = `<div class="error-box">${message}</div>`;
     }
 }
 
-function goToHome() { window.location.href = 'index.html'; }
-function navigateToSelection() { window.location.href = 'selection.html'; }
+function showModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.style.display = 'block';
+}
+
+function hideModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.style.display = 'none';
+}
+
+function formatDateDisplay(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+}
+
+function formatPhone(phone) {
+    if (!phone) return '';
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 11) {
+        return cleaned.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+    }
+    return phone;
+}
+
+function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
