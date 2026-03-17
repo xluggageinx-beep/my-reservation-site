@@ -1,395 +1,585 @@
-// 예약 정보 확인 페이지 로직
+const OPERATOR_PASSWORD = '0814';
 
-const RS_PASSWORD = '0000';
-const ADMIN_KEYWORD = '관리자';
+let times = [];
+let operators = [];
+let reservations = [];
+let currentEditingTime = null;
+let currentEditingOperator = null;
+let selectedDatesForTime = [];
 
-let viewMode = null; // 'operator', 'rs', 'admin'
-let currentOperator = null;
-let currentTime = null;
-let currentReservations = [];
-let currentCancelReservationId = null;
-let allOperators = [];
-let allTimes = [];
+function setActiveTab(tabName) {
+    const buttons = Array.from(document.querySelectorAll('#manageSection .button-group button'));
 
-// 예약 확인
-async function checkReservations() {
-    const nameInput = document.getElementById('nameInput').value.trim();
-    const codeInput = document.getElementById('codeInput').value.trim();
+    buttons.forEach(btn => {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+    });
 
-    if (!nameInput) {
-        alert('이름/타임 이름/관리자를 입력해주세요.');
-        return;
+    const target = buttons.find(btn => btn.textContent.trim() === tabName);
+    if (target) {
+        target.classList.remove('btn-secondary');
+        target.classList.add('btn-primary');
     }
+}
 
-    if (!codeInput) {
-        alert('학번/패스워드를 입력해주세요.');
-        return;
-    }
+async function authenticate() {
+    const password = document.getElementById('password').value.trim();
 
-    try {
-        allTimes = await getData('times', { limit: 1000 });
-        allOperators = await getData('operators', { limit: 1000 });
-
-        try {
-            currentReservations = await getData('reservations', { limit: 5000 });
-        } catch (error) {
-            console.warn('예약 데이터 로드 실패:', error);
-            currentReservations = [];
-        }
-
-        if (nameInput === ADMIN_KEYWORD && codeInput === RS_PASSWORD) {
-            viewMode = 'admin';
-            displayAdminView();
-        } else if (codeInput === RS_PASSWORD) {
-            currentTime = allTimes.find(t => t.name === nameInput);
-
-            if (!currentTime) {
-                alert('해당 타임을 찾을 수 없습니다. 타임 이름을 확인해주세요.');
-                return;
-            }
-
-            viewMode = 'rs';
-            displayRSView();
-        } else {
-            currentOperator = allOperators.find(op =>
-                op.name === nameInput && op.student_id === codeInput
-            );
-
-            if (!currentOperator) {
-                alert('일치하는 술자 정보를 찾을 수 없습니다. 이름과 학번을 확인해주세요.');
-                return;
-            }
-
-            viewMode = 'operator';
-            displayOperatorView();
-        }
-
+    if (password === OPERATOR_PASSWORD) {
         document.getElementById('authSection').style.display = 'none';
-        document.getElementById('reservationsSection').style.display = 'block';
-    } catch (error) {
-        console.error('예약 조회 오류:', error);
-        alert('예약 정보를 불러오는 중 오류가 발생했습니다.');
+        document.getElementById('manageSection').style.display = 'block';
+        await showTimesManagement();
+    } else {
+        alert('패스워드가 올바르지 않습니다.');
+        document.getElementById('password').value = '';
     }
 }
 
-// 전체 관리자 뷰
-function displayAdminView() {
-    document.getElementById('viewerInfo').innerHTML = `
-        <p style="font-size: 1.2em; margin: 0;">
-            <strong>🔑 전체 관리자</strong>
-        </p>
-        <p style="margin: 10px 0 0 0; color: var(--text-light);">
-            모든 타임의 전체 예약 내역
-        </p>
-    `;
-
-    document.getElementById('listTitle').textContent = '전체 예약 목록';
-
-    const container = document.getElementById('reservationsList');
-
-    if (currentReservations.length === 0) {
-        container.innerHTML = `
-            <div class="notice-box" style="text-align: center; padding: 40px;">
-                <p>예약이 없습니다.</p>
-            </div>
-        `;
-        return;
-    }
-
-    currentReservations.sort((a, b) =>
-        new Date(a.reservation_date) - new Date(b.reservation_date)
-    );
-
-    let html = `
-        <div style="overflow-x: auto;">
-            <table class="data-table" style="font-size: 0.8em;">
-                <thead>
-                    <tr>
-                        <th>타임</th>
-                        <th>술자</th>
-                        <th>날짜</th>
-                        <th>대상자</th>
-                        <th>생년월일</th>
-                        <th>성별</th>
-                        <th>전화번호</th>
-                        <th>주소</th>
-                        <th>직업</th>
-                        <th>관계</th>
-                        <th>관리</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-
-    currentReservations.forEach(reservation => {
-        const operator = allOperators.find(op => op.id === reservation.operator_id);
-        const time = allTimes.find(t => t.id === reservation.time_id);
-        const isPast = isPastDate(reservation.reservation_date);
-        const rowStyle = isPast ? 'opacity: 0.5;' : '';
-
-        html += `
-            <tr style="${rowStyle}">
-                <td>${time ? time.name : '알수없음'}</td>
-                <td>${operator ? operator.name : '알수없음'}</td>
-                <td>${formatDateShort(reservation.reservation_date)}</td>
-                <td>${reservation.participant_name || '-'}</td>
-                <td>${reservation.participant_birthdate || '-'}</td>
-                <td>${reservation.participant_gender || '-'}</td>
-                <td>${reservation.participant_phone || '-'}</td>
-                <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${reservation.participant_address || '-'}">
-                    ${reservation.participant_address || '-'}
-                </td>
-                <td>${reservation.participant_occupation || '-'}</td>
-                <td>${reservation.participant_relationship || '-'}</td>
-                <td>
-                    ${!isPast ? `
-                        <button onclick="showCancelConfirmation('${reservation.id}', '${reservation.participant_name}', '${reservation.reservation_date}')"
-                                style="background-color: var(--danger); color: white; padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer; font-size: 0.9em;">
-                            취소
-                        </button>
-                    ` : '<span style="color: #999;">완료</span>'}
-                </td>
-            </tr>
-        `;
-    });
-
-    html += `
-                </tbody>
-            </table>
-        </div>
-    `;
-
-    container.innerHTML = html;
+async function showTimesManagement() {
+    setActiveTab('타임 수정');
+    document.getElementById('timesManagement').style.display = 'block';
+    document.getElementById('operatorsManagement').style.display = 'none';
+    document.getElementById('reservationsManagement').style.display = 'none';
+    await loadTimes();
 }
 
-// RS 뷰
-function displayRSView() {
-    const timeOperators = allOperators.filter(op => op.time_id === currentTime.id);
-
-    const timeReservations = currentReservations.filter(r =>
-        timeOperators.some(op => op.id === r.operator_id)
-    );
-
-    document.getElementById('viewerInfo').innerHTML = `
-        <p style="font-size: 1.2em; margin: 0;">
-            <strong>📋 ${currentTime.name} RS</strong>
-        </p>
-        <p style="margin: 10px 0 0 0; color: var(--text-light);">
-            ${currentTime.day_of_week}요일 ${currentTime.time_range} | 술자 ${timeOperators.length}명
-        </p>
-    `;
-
-    document.getElementById('listTitle').textContent = `${currentTime.name} 예약 목록`;
-
-    const container = document.getElementById('reservationsList');
-
-    if (timeReservations.length === 0) {
-        container.innerHTML = `
-            <div class="notice-box" style="text-align: center; padding: 40px;">
-                <p>예약이 없습니다.</p>
-            </div>
-        `;
-        return;
-    }
-
-    timeReservations.sort((a, b) =>
-        new Date(a.reservation_date) - new Date(b.reservation_date)
-    );
-
-    let html = `
-        <div style="overflow-x: auto;">
-            <table class="data-table" style="font-size: 0.9em;">
-                <thead>
-                    <tr>
-                        <th>술자</th>
-                        <th>날짜</th>
-                        <th>대상자</th>
-                        <th>관계</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-
-    timeReservations.forEach(reservation => {
-        const operator = allOperators.find(op => op.id === reservation.operator_id);
-        const isPast = isPastDate(reservation.reservation_date);
-        const rowStyle = isPast ? 'opacity: 0.5;' : '';
-
-        html += `
-            <tr style="${rowStyle}">
-                <td>${operator ? operator.name : '알수없음'}</td>
-                <td>${formatDateDisplay(reservation.reservation_date)}</td>
-                <td>${reservation.participant_name || '-'}</td>
-                <td>${reservation.participant_relationship || '-'}</td>
-            </tr>
-        `;
-    });
-
-    html += `
-                </tbody>
-            </table>
-        </div>
-        <div class="notice-box" style="margin-top: 20px; background-color: #FFF9E6;">
-            <p style="text-align: center; margin: 0; color: #CC8400;">
-                <strong>※ RS 모드에서는 개인정보 보호를 위해 제한된 정보만 표시됩니다.</strong>
-            </p>
-        </div>
-    `;
-
-    container.innerHTML = html;
+async function showOperatorsManagement() {
+    setActiveTab('술자 리스트 수정');
+    document.getElementById('timesManagement').style.display = 'none';
+    document.getElementById('operatorsManagement').style.display = 'block';
+    document.getElementById('reservationsManagement').style.display = 'none';
+    await loadOperators();
 }
 
-// 술자 개인 뷰
-function displayOperatorView() {
-    const operatorReservations = currentReservations.filter(r =>
-        r.operator_id === currentOperator.id
-    );
-
-    const time = allTimes.find(t => t.id === currentOperator.time_id);
-
-    document.getElementById('viewerInfo').innerHTML = `
-        <p style="font-size: 1.2em; margin: 0;">
-            <strong>${currentOperator.name}</strong> (${currentOperator.student_id})
-        </p>
-        <p style="margin: 10px 0 0 0; color: var(--text-light);">
-            ${time ? `${time.name} ${time.day_of_week}요일 ${time.time_range}` : ''}
-        </p>
-    `;
-
-    document.getElementById('listTitle').textContent = '내 예약 목록';
-
-    const container = document.getElementById('reservationsList');
-
-    if (operatorReservations.length === 0) {
-        container.innerHTML = `
-            <div class="notice-box" style="text-align: center; padding: 40px;">
-                <p>아직 예약이 없습니다.</p>
-            </div>
-        `;
-        return;
-    }
-
-    operatorReservations.sort((a, b) =>
-        new Date(a.reservation_date) - new Date(b.reservation_date)
-    );
-
-    let html = '';
-
-    operatorReservations.forEach((reservation, index) => {
-        const isPast = isPastDate(reservation.reservation_date);
-        const cardStyle = isPast ? 'opacity: 0.6; background-color: #f5f5f5;' : '';
-
-        html += `
-            <div class="time-card" style="${cardStyle}">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
-                    <h4 style="color: var(--primary-color); margin: 0;">예약 ${index + 1}</h4>
-                    ${isPast ? '<span style="color: var(--text-light); font-size: 0.9em;">완료된 예약</span>' : ''}
-                </div>
-
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 15px;">
-                    <p style="margin: 5px 0;"><strong>예약 날짜:</strong> ${formatDateDisplay(reservation.reservation_date)}</p>
-                    <p style="margin: 5px 0;"><strong>대상자 이름:</strong> ${reservation.participant_name || '미입력'}</p>
-                    <p style="margin: 5px 0;"><strong>생년월일:</strong> ${reservation.participant_birthdate || '미입력'}</p>
-                    <p style="margin: 5px 0;"><strong>성별:</strong> ${reservation.participant_gender || '미입력'}</p>
-                    <p style="margin: 5px 0;"><strong>전화번호:</strong> ${reservation.participant_phone || '미입력'}</p>
-                    <p style="margin: 5px 0;"><strong>주소:</strong> ${reservation.participant_address || '미입력'}</p>
-                    <p style="margin: 5px 0;"><strong>직업:</strong> ${reservation.participant_occupation || '미입력'}</p>
-                    <p style="margin: 5px 0;"><strong>관계:</strong> ${reservation.participant_relationship || '미입력'}</p>
-                </div>
-
-                ${!isPast ? `
-                    <button class="btn btn-danger" style="width: 100%;" onclick="showCancelConfirmation('${reservation.id}', '${reservation.participant_name}', '${reservation.reservation_date}')">
-                        예약 취소하기
-                    </button>
-                ` : `
-                    <p style="text-align: center; color: var(--text-light); margin: 0;">
-                        지난 예약은 취소할 수 없습니다.
-                    </p>
-                `}
-            </div>
-        `;
-    });
-
-    container.innerHTML = html;
+async function showReservationsManagement() {
+    setActiveTab('예약 관리');
+    document.getElementById('timesManagement').style.display = 'none';
+    document.getElementById('operatorsManagement').style.display = 'none';
+    document.getElementById('reservationsManagement').style.display = 'block';
+    await loadReservationsSummary();
 }
 
-// 예약 취소 확인 모달
-function showCancelConfirmation(reservationId, participantName, reservationDate) {
-    currentCancelReservationId = reservationId;
-
-    const confirmContent = document.getElementById('cancelConfirmContent');
-    confirmContent.innerHTML = `
-        <p><strong>대상자:</strong> ${participantName}</p>
-        <p><strong>예약 날짜:</strong> ${formatDateDisplay(reservationDate)}</p>
-        <p style="margin-top: 20px;">위 예약을 취소하시겠습니까?</p>
-    `;
-
-    showModal('cancelModal');
+function navigateToReservationCheck() {
+    window.location.href = 'reservation-check.html';
 }
 
-// 예약 취소 실행
-async function confirmCancelReservation() {
-    if (!currentCancelReservationId) {
-        alert('취소할 예약을 선택해주세요.');
-        return;
-    }
+async function loadTimes() {
+    showLoading('timesList');
 
     try {
-        await deleteData('reservations', currentCancelReservationId);
-        alert('예약이 취소되었습니다.');
+        times = await getData('times', {
+            limit: 1000,
+            order: 'created_at.asc,name.asc'
+        });
 
-        closeCancelModal();
+        document.getElementById('currentTimeCount').textContent = times.length;
 
-        try {
-            currentReservations = await getData('reservations', { limit: 5000 });
-        } catch (error) {
-            console.error('예약 목록 재로드 오류:', error);
-            currentReservations = [];
-        }
-
-        if (viewMode === 'admin') {
-            displayAdminView();
-        } else if (viewMode === 'rs') {
-            displayRSView();
+        const addTimeBtn = document.getElementById('addTimeBtn');
+        if (times.length >= 6) {
+            addTimeBtn.disabled = true;
+            addTimeBtn.textContent = '타임 추가 (최대 6개)';
         } else {
-            displayOperatorView();
+            addTimeBtn.disabled = false;
+            addTimeBtn.textContent = '타임 추가';
         }
+
+        displayTimes();
     } catch (error) {
-        console.error('예약 취소 오류:', error);
-        alert('예약 취소 중 오류가 발생했습니다.');
+        console.error('타임 로드 오류:', error);
+        showError('timesList', '타임 데이터를 불러오는 중 오류가 발생했습니다.');
     }
 }
 
-function closeCancelModal() {
-    hideModal('cancelModal');
-    currentCancelReservationId = null;
+function displayTimes() {
+    const container = document.getElementById('timesList');
+
+    if (times.length === 0) {
+        container.innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-light);">등록된 타임이 없습니다.</p>';
+        return;
+    }
+
+    container.innerHTML = '';
+
+    times.forEach(time => {
+        const card = document.createElement('div');
+        card.className = 'time-card';
+
+        const datesCount = Array.isArray(time.selected_dates) ? time.selected_dates.length : 0;
+        const datesInfo = datesCount > 0 ? `${datesCount}개 날짜 선택됨` : '날짜 미선택';
+
+        card.innerHTML = `
+            <h3>${time.name}</h3>
+            <div class="time-info">
+                <p><strong>요일:</strong> ${time.day_of_week}요일</p>
+                <p><strong>시간:</strong> ${time.time_range}</p>
+                <p><strong>주차 정보:</strong> ${datesInfo}</p>
+            </div>
+            <div style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn btn-secondary" onclick="editTime('${time.id}')">수정</button>
+                <button class="btn btn-danger" onclick="deleteTime('${time.id}')">삭제</button>
+            </div>
+        `;
+
+        container.appendChild(card);
+    });
 }
 
-function resetSearch() {
-    document.getElementById('nameInput').value = '';
-    document.getElementById('codeInput').value = '';
-    document.getElementById('authSection').style.display = 'block';
-    document.getElementById('reservationsSection').style.display = 'none';
+function showAddTimeModal() {
+    if (times.length >= 6) {
+        alert('최대 6개의 타임만 추가할 수 있습니다.');
+        return;
+    }
 
-    viewMode = null;
-    currentOperator = null;
-    currentTime = null;
-    currentReservations = [];
+    currentEditingTime = null;
+    selectedDatesForTime = [];
+
+    document.getElementById('timeModalTitle').textContent = '타임 추가';
+    document.getElementById('timeName').value = '';
+    document.getElementById('dayOfWeek').value = '월';
+    document.getElementById('timeRange').value = '';
+    document.getElementById('selectedDatesDisplay').textContent = '선택된 날짜가 없습니다.';
+    document.getElementById('selectedDateCount').textContent = '0';
+
+    showModal('timeModal');
+}
+
+function editTime(timeId) {
+    currentEditingTime = times.find(t => t.id === timeId);
+    if (!currentEditingTime) return;
+
+    selectedDatesForTime = Array.isArray(currentEditingTime.selected_dates)
+        ? [...currentEditingTime.selected_dates]
+        : [];
+
+    document.getElementById('timeModalTitle').textContent = '타임 수정';
+    document.getElementById('timeName').value = currentEditingTime.name || '';
+    document.getElementById('dayOfWeek').value = currentEditingTime.day_of_week || '월';
+    document.getElementById('timeRange').value = currentEditingTime.time_range || '';
+    updateSelectedDatesDisplay();
+    document.getElementById('selectedDateCount').textContent = selectedDatesForTime.length;
+
+    showModal('timeModal');
+}
+
+async function saveTime() {
+    const name = document.getElementById('timeName').value.trim();
+    const dayOfWeek = document.getElementById('dayOfWeek').value;
+    const timeRange = document.getElementById('timeRange').value.trim();
+
+    if (!name || !timeRange) {
+        alert('타임 이름과 시간 범위를 입력해주세요.');
+        return;
+    }
+
+    const payload = {
+        name,
+        day_of_week: dayOfWeek,
+        time_range: timeRange,
+        selected_dates: selectedDatesForTime
+    };
+
+    try {
+        if (currentEditingTime) {
+            await updateData('times', currentEditingTime.id, payload);
+            alert('타임이 수정되었습니다.');
+        } else {
+            payload.id = generateUUID();
+            await createData('times', payload);
+            alert('타임이 추가되었습니다.');
+        }
+
+        closeTimeModal();
+        await loadTimes();
+    } catch (error) {
+        console.error('타임 저장 오류:', error);
+        alert('타임 저장 중 오류가 발생했습니다.');
+    }
+}
+
+async function deleteTime(timeId) {
+    try {
+        const linkedOperators = await getData('operators', { time_id: timeId, limit: 1000 });
+
+        if (linkedOperators.length > 0) {
+            alert('이 타임에 속한 술자가 있습니다. 먼저 술자를 정리해주세요.');
+            return;
+        }
+
+        if (!confirm('정말 이 타임을 삭제하시겠습니까?')) return;
+
+        await deleteData('times', timeId);
+        alert('타임이 삭제되었습니다.');
+        await loadTimes();
+    } catch (error) {
+        console.error('타임 삭제 오류:', error);
+        alert('타임 삭제 중 오류가 발생했습니다.');
+    }
+}
+
+function closeTimeModal() {
+    hideModal('timeModal');
+    currentEditingTime = null;
+    selectedDatesForTime = [];
+}
+
+function showDatePicker() {
+    const dayOfWeek = document.getElementById('dayOfWeek').value;
+    renderCalendar(dayOfWeek);
+    showModal('datePickerModal');
+}
+
+function renderCalendar(dayOfWeek) {
+    const container = document.getElementById('calendarContainer');
+    const currentYear = new Date().getFullYear();
+    const dayMap = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5 };
+    const targetDay = dayMap[dayOfWeek];
+
+    container.innerHTML = '<h4 style="text-align:center; margin-bottom:20px;">날짜를 선택하세요 (최대 13개)</h4>';
+
+    for (let month = 1; month <= 12; month++) {
+        const monthDiv = document.createElement('div');
+        monthDiv.style.marginBottom = '30px';
+        monthDiv.innerHTML = `<h5 style="color: var(--primary-color); margin-bottom:15px;">${currentYear}년 ${month}월</h5>`;
+
+        const datesGrid = document.createElement('div');
+        datesGrid.className = 'date-grid';
+
+        const daysInMonth = new Date(currentYear, month, 0).getDate();
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(currentYear, month - 1, day);
+            const dateString = formatDate(date);
+
+            if (date.getDay() === targetDay) {
+                const btn = document.createElement('button');
+                btn.className = 'date-button';
+                btn.textContent = formatDateShort(dateString);
+
+                if (selectedDatesForTime.includes(dateString)) {
+                    btn.classList.add('selected');
+                }
+
+                btn.onclick = () => toggleDateSelection(dateString, btn);
+                datesGrid.appendChild(btn);
+            }
+        }
+
+        if (datesGrid.children.length > 0) {
+            monthDiv.appendChild(datesGrid);
+            container.appendChild(monthDiv);
+        }
+    }
+
+    document.getElementById('selectedDateCount').textContent = selectedDatesForTime.length;
+}
+
+function toggleDateSelection(dateString, button) {
+    const index = selectedDatesForTime.indexOf(dateString);
+
+    if (index > -1) {
+        selectedDatesForTime.splice(index, 1);
+        button.classList.remove('selected');
+    } else {
+        if (selectedDatesForTime.length >= 13) {
+            alert('최대 13개의 날짜만 선택할 수 있습니다.');
+            return;
+        }
+
+        selectedDatesForTime.push(dateString);
+        button.classList.add('selected');
+    }
+
+    document.getElementById('selectedDateCount').textContent = selectedDatesForTime.length;
+}
+
+function confirmDates() {
+    selectedDatesForTime.sort();
+    updateSelectedDatesDisplay();
+    hideModal('datePickerModal');
+}
+
+function closeDatePicker() {
+    hideModal('datePickerModal');
+}
+
+function updateSelectedDatesDisplay() {
+    const display = document.getElementById('selectedDatesDisplay');
+
+    if (selectedDatesForTime.length === 0) {
+        display.textContent = '선택된 날짜가 없습니다.';
+        display.style.color = 'var(--text-light)';
+    } else {
+        display.textContent = `${selectedDatesForTime.length}개의 날짜가 선택되었습니다.`;
+        display.style.color = 'var(--primary-color)';
+    }
+}
+
+async function loadOperators() {
+    showLoading('operatorsList');
+
+    try {
+        operators = await getData('operators', {
+            limit: 1000,
+            order: 'created_at.asc,name.asc'
+        });
+
+        times = await getData('times', {
+            limit: 1000,
+            order: 'created_at.asc,name.asc'
+        });
+
+        displayOperators();
+    } catch (error) {
+        console.error('술자 로드 오류:', error);
+        showError('operatorsList', '술자 데이터를 불러오는 중 오류가 발생했습니다.');
+    }
+}
+
+function displayOperators() {
+    const container = document.getElementById('operatorsList');
+
+    if (operators.length === 0) {
+        container.innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-light);">등록된 술자가 없습니다.</p>';
+        return;
+    }
+
+    let html = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>이름</th>
+                    <th>학번</th>
+                    <th>전화번호</th>
+                    <th>타임</th>
+                    <th>관리</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    operators.forEach(operator => {
+        const time = times.find(t => t.id === operator.time_id);
+
+        html += `
+            <tr>
+                <td>${operator.name}</td>
+                <td>${operator.student_id}</td>
+                <td>${operator.phone || '-'}</td>
+                <td>${time ? time.name : '미지정'}</td>
+                <td>
+                    <button onclick="editOperator('${operator.id}')" style="background-color: var(--primary-color); color: white;">수정</button>
+                    <button onclick="deleteOperator('${operator.id}')" style="background-color: var(--danger); color: white;">삭제</button>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+}
+
+function showAddOperatorModal() {
+    if (times.length === 0) {
+        alert('먼저 타임을 추가해주세요.');
+        return;
+    }
+
+    currentEditingOperator = null;
+
+    document.getElementById('operatorModalTitle').textContent = '술자 추가';
+    document.getElementById('operatorName').value = '';
+    document.getElementById('operatorStudentId').value = '';
+    document.getElementById('operatorPhone').value = '';
+
+    const timeSelect = document.getElementById('operatorTimeId');
+    timeSelect.innerHTML = '';
+
+    times.forEach(time => {
+        const count = operators.filter(op => op.time_id === time.id).length;
+        const option = document.createElement('option');
+        option.value = time.id;
+        option.textContent = `${time.name} (${time.day_of_week}요일 ${time.time_range}) - ${count}/12명`;
+        if (count >= 12) option.disabled = true;
+        timeSelect.appendChild(option);
+    });
+
+    showModal('operatorModal');
+}
+
+function editOperator(operatorId) {
+    currentEditingOperator = operators.find(op => op.id === operatorId);
+    if (!currentEditingOperator) return;
+
+    document.getElementById('operatorModalTitle').textContent = '술자 수정';
+    document.getElementById('operatorName').value = currentEditingOperator.name || '';
+    document.getElementById('operatorStudentId').value = currentEditingOperator.student_id || '';
+    document.getElementById('operatorPhone').value = currentEditingOperator.phone || '';
+
+    const timeSelect = document.getElementById('operatorTimeId');
+    timeSelect.innerHTML = '';
+
+    times.forEach(time => {
+        const count = operators.filter(op => op.time_id === time.id).length;
+        const option = document.createElement('option');
+        option.value = time.id;
+        option.textContent = `${time.name} (${time.day_of_week}요일 ${time.time_range}) - ${count}/12명`;
+        if (time.id === currentEditingOperator.time_id) option.selected = true;
+        timeSelect.appendChild(option);
+    });
+
+    showModal('operatorModal');
+}
+
+async function saveOperator() {
+    const name = document.getElementById('operatorName').value.trim();
+    const studentId = document.getElementById('operatorStudentId').value.trim();
+    const phone = document.getElementById('operatorPhone').value.trim();
+    const timeId = document.getElementById('operatorTimeId').value;
+
+    if (!name || !studentId || !phone || !timeId) {
+        alert('모든 항목을 입력해주세요.');
+        return;
+    }
+
+    const count = operators.filter(op => op.time_id === timeId).length;
+    if (!currentEditingOperator && count >= 12) {
+        alert('한 타임당 최대 12명의 술자만 추가할 수 있습니다.');
+        return;
+    }
+
+    const payload = {
+        name,
+        student_id: studentId,
+        phone: formatPhone(phone),
+        time_id: timeId
+    };
+
+    try {
+        if (currentEditingOperator) {
+            await updateData('operators', currentEditingOperator.id, payload);
+            alert('술자가 수정되었습니다.');
+        } else {
+            payload.id = generateUUID();
+            await createData('operators', payload);
+            alert('술자가 추가되었습니다.');
+        }
+
+        closeOperatorModal();
+        await loadOperators();
+    } catch (error) {
+        console.error('술자 저장 오류:', error);
+        alert('술자 저장 중 오류가 발생했습니다.');
+    }
+}
+
+async function deleteOperator(operatorId) {
+    try {
+        const linkedReservations = await getData('reservations', { operator_id: operatorId, limit: 5000 });
+
+        if (linkedReservations.length > 0) {
+            if (!confirm(`이 술자에게 ${linkedReservations.length}개의 예약이 있습니다. 정말 삭제하시겠습니까? (예약도 함께 삭제됩니다)`)) {
+                return;
+            }
+
+            for (const reservation of linkedReservations) {
+                await deleteData('reservations', reservation.id);
+            }
+        } else {
+            if (!confirm('정말 이 술자를 삭제하시겠습니까?')) return;
+        }
+
+        await deleteData('operators', operatorId);
+        alert('술자가 삭제되었습니다.');
+        await loadOperators();
+    } catch (error) {
+        console.error('술자 삭제 오류:', error);
+        alert('술자 삭제 중 오류가 발생했습니다.');
+    }
+}
+
+function closeOperatorModal() {
+    hideModal('operatorModal');
+    currentEditingOperator = null;
+}
+
+async function loadReservationsSummary() {
+    try {
+        reservations = await getData('reservations', { limit: 5000 });
+        document.getElementById('currentReservationCount').textContent = reservations.length;
+
+        const summaryContainer = document.getElementById('reservationsSummary');
+
+        if (reservations.length === 0) {
+            summaryContainer.innerHTML = `
+                <div class="notice-box" style="text-align:center; padding:40px;">
+                    <p>현재 예약이 없습니다.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const allTimes = await getData('times', { limit: 1000 });
+        const timeStats = {};
+
+        reservations.forEach(r => {
+            const time = allTimes.find(t => t.id === r.time_id);
+            const timeName = time ? time.name : '알수없음';
+            if (!timeStats[timeName]) timeStats[timeName] = 0;
+            timeStats[timeName]++;
+        });
+
+        let html = '<div class="time-card">';
+        html += '<h4 style="color: var(--primary-color);">타임별 예약 현황</h4>';
+        html += '<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:15px; margin-top:15px;">';
+
+        for (const [timeName, count] of Object.entries(timeStats)) {
+            html += `
+                <div style="padding:15px; background-color:#f8f9fa; border-radius:5px; text-align:center;">
+                    <div style="font-weight:600; margin-bottom:5px;">${timeName}</div>
+                    <div style="font-size:1.5em; color:var(--primary-color);">${count}건</div>
+                </div>
+            `;
+        }
+
+        html += '</div></div>';
+        summaryContainer.innerHTML = html;
+    } catch (error) {
+        console.error('예약 요약 로드 오류:', error);
+        showError('reservationsSummary', '예약 정보를 불러오는 중 오류가 발생했습니다.');
+    }
+}
+
+async function deleteAllReservations() {
+    if (!confirm('⚠️ 정말로 모든 예약을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다!')) return;
+    if (!confirm('⚠️⚠️ 최종 확인: 모든 예약 데이터가 영구적으로 삭제됩니다.\n\n계속하시겠습니까?')) return;
+
+    try {
+        const allReservations = await getData('reservations', { limit: 5000 });
+
+        if (allReservations.length === 0) {
+            alert('삭제할 예약이 없습니다.');
+            return;
+        }
+
+        let deletedCount = 0;
+        for (const reservation of allReservations) {
+            await deleteData('reservations', reservation.id);
+            deletedCount++;
+        }
+
+        alert(`총 ${deletedCount}개의 예약이 삭제되었습니다.`);
+        await loadReservationsSummary();
+    } catch (error) {
+        console.error('전체 예약 삭제 오류:', error);
+        alert('예약 삭제 중 오류가 발생했습니다.');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    const nameInput = document.getElementById('nameInput');
-    const codeInput = document.getElementById('codeInput');
-
-    if (nameInput) {
-        nameInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') checkReservations();
-        });
-    }
-
-    if (codeInput) {
-        codeInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') checkReservations();
+    const passwordInput = document.getElementById('password');
+    if (passwordInput) {
+        passwordInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') authenticate();
         });
     }
 });
