@@ -1,5 +1,3 @@
-// 예약 완료 페이지 로직
-
 function displayReservationInfo() {
     const participantName = sessionStorage.getItem('participantName');
     const participantPhone = sessionStorage.getItem('participantPhone');
