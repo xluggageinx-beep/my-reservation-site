@@ -1,132 +1,158 @@
-// 참가자 정보 입력 페이지 로직
+// 술자 선택 페이지 로직
 
-function handleRelationshipChange() {
-    const relationshipType = document.getElementById('relationshipType').value;
-    const customGroup = document.getElementById('customRelationshipGroup');
-    const customInput = document.getElementById('customRelationship');
+let times = [];
+let operators = [];
+let reservations = [];
 
-    if (relationshipType === '직접입력') {
-        customGroup.style.display = 'block';
-        customInput.required = true;
-    } else {
-        customGroup.style.display = 'none';
-        customInput.required = false;
-        customInput.value = '';
+const dayOrder = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5 };
+
+async function loadTimesAndOperators() {
+    const container = document.getElementById('timesContainer');
+    if (!container) return;
+
+    showLoading('timesContainer');
+
+    try {
+        times = await getData('times', {
+            order: 'day_of_week.asc,name.asc',
+            limit: 100
+        });
+
+        operators = await getData('operators', {
+            order: 'created_at.asc,name.asc',
+            limit: 1000
+        });
+
+        try {
+            reservations = await getData('reservations', {
+                limit: 1000
+            });
+        } catch (reservationError) {
+            console.warn('예약 데이터 로드 실패:', reservationError);
+            reservations = [];
+        }
+
+        if (times.length === 0) {
+            showError('timesContainer', '등록된 타임이 없습니다. 관리자에게 문의해주세요.');
+            return;
+        }
+
+        if (operators.length === 0) {
+            showError('timesContainer', '등록된 술자가 없습니다. 관리자에게 문의해주세요.');
+            return;
+        }
+
+        displayTimesAndOperators();
+    } catch (error) {
+        console.error('데이터 로드 오류:', error);
+        showError('timesContainer', '데이터를 불러오는 중 오류가 발생했습니다. 페이지를 새로고침 해주세요.');
     }
 }
 
-async function submitParticipantInfo() {
-    const name = document.getElementById('participantName').value.trim();
-    const birthdate = document.getElementById('participantBirthdate').value.trim();
-    const gender = document.getElementById('participantGender').value;
-    const phone = document.getElementById('participantPhone').value.trim();
-    const address = document.getElementById('participantAddress').value.trim();
-    const occupation = document.getElementById('participantOccupation').value.trim();
-    const relationshipType = document.getElementById('relationshipType').value;
-    const customRelationship = document.getElementById('customRelationship').value.trim();
-
-    if (!name) {
-        alert('이름을 입력해주세요.');
-        return;
-    }
-
-    if (!birthdate) {
-        alert('생년월일을 선택해주세요.');
-        return;
-    }
-
-    if (!gender) {
-        alert('성별을 선택해주세요.');
-        return;
-    }
-
-    if (!phone) {
-        alert('전화번호를 입력해주세요.');
-        return;
-    }
-
-    const digits = phone.replace(/\D/g, '');
-    const phonePattern = /^01[0-9][0-9]{7,8}$/;
-    if (!phonePattern.test(digits)) {
-        alert('올바른 전화번호 형식이 아닙니다. (예: 010-0000-0000)');
-        return;
-    }
-
-    if (!address) {
-        alert('주소를 입력해주세요.');
-        return;
-    }
-
-    if (!occupation) {
-        alert('직업을 입력해주세요.');
-        return;
-    }
-
-    if (!relationshipType) {
-        alert('술자와의 관계를 선택해주세요.');
-        return;
-    }
-
-    if (relationshipType === '직접입력' && !customRelationship) {
-        alert('관계를 직접 입력해주세요.');
-        return;
-    }
-
-    const finalRelationship = relationshipType === '직접입력' ? customRelationship : relationshipType;
-
-    sessionStorage.setItem('participantName', name);
-    sessionStorage.setItem('participantBirthdate', birthdate);
-    sessionStorage.setItem('participantGender', gender);
-    sessionStorage.setItem('participantPhone', formatPhone(phone));
-    sessionStorage.setItem('participantAddress', address);
-    sessionStorage.setItem('participantOccupation', occupation);
-    sessionStorage.setItem('participantRelationship', finalRelationship);
-
-    window.location.href = 'selection.html';
+function extractStartTime(timeRange) {
+    if (!timeRange) return '00:00';
+    const match = String(timeRange).match(/^(\d{1,2}:\d{2})/);
+    return match ? match[1].padStart(5, '0') : '00:00';
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    const consentsAgreed = sessionStorage.getItem('consentsAgreed');
-    if (consentsAgreed !== 'true') {
-        alert('먼저 개인정보 활용에 동의해주세요.');
-        window.location.href = 'consent.html';
-        return;
+function sortTimes(timesArray) {
+    return timesArray.sort((a, b) => {
+        const dayA = dayOrder[a.day_of_week] || 99;
+        const dayB = dayOrder[b.day_of_week] || 99;
+
+        if (dayA !== dayB) return dayA - dayB;
+
+        const timeA = extractStartTime(a.time_range);
+        const timeB = extractStartTime(b.time_range);
+
+        return timeA.localeCompare(timeB);
+    });
+}
+
+function displayTimesAndOperators() {
+    const container = document.getElementById('timesContainer');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    const sortedTimes = sortTimes([...times]);
+    let hasVisibleTime = false;
+
+    sortedTimes.forEach(time => {
+        let timeOperators = operators.filter(op => op.time_id === time.id);
+
+        if (timeOperators.length === 0) return;
+
+        hasVisibleTime = true;
+
+        timeOperators = timeOperators.sort((a, b) => {
+            const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return aCreated - bCreated;
+        });
+
+        const timeCard = document.createElement('div');
+        timeCard.className = 'time-card';
+
+        timeCard.innerHTML = `
+            <h3>${time.name}</h3>
+            <div class="time-info">
+                <p><strong>요일:</strong> ${time.day_of_week}요일</p>
+                <p><strong>시간:</strong> ${time.time_range}</p>
+                <p><strong>술자 수:</strong> ${timeOperators.length}명</p>
+            </div>
+            <div class="operator-list" id="operators-${time.id}"></div>
+        `;
+
+        container.appendChild(timeCard);
+
+        const operatorList = document.getElementById(`operators-${time.id}`);
+        timeOperators.forEach(operator => {
+            const operatorItem = document.createElement('div');
+            operatorItem.className = 'operator-item';
+            operatorItem.innerHTML = `<h4>${operator.name}</h4>`;
+            operatorItem.onclick = () => selectOperator(time.id, operator.id, time.name, operator.name);
+            operatorList.appendChild(operatorItem);
+        });
+    });
+
+    if (!hasVisibleTime) {
+        container.innerHTML = `
+            <div class="notice-box" style="text-align: center; padding: 40px;">
+                <p>현재 선택 가능한 술자가 없습니다.<br>관리자에게 문의해주세요.</p>
+            </div>
+        `;
     }
+}
 
-    const savedName = sessionStorage.getItem('participantName');
-    const savedBirthdate = sessionStorage.getItem('participantBirthdate');
-    const savedGender = sessionStorage.getItem('participantGender');
-    const savedPhone = sessionStorage.getItem('participantPhone');
-    const savedAddress = sessionStorage.getItem('participantAddress');
-    const savedOccupation = sessionStorage.getItem('participantOccupation');
-    const savedRelationship = sessionStorage.getItem('participantRelationship');
+function selectOperator(timeId, operatorId, timeName, operatorName) {
+    const participantPhone = sessionStorage.getItem('participantPhone');
 
-    if (savedName) document.getElementById('participantName').value = savedName;
-    if (savedBirthdate) document.getElementById('participantBirthdate').value = savedBirthdate;
-    if (savedGender) document.getElementById('participantGender').value = savedGender;
-    if (savedPhone) document.getElementById('participantPhone').value = savedPhone;
-    if (savedAddress) document.getElementById('participantAddress').value = savedAddress;
-    if (savedOccupation) document.getElementById('participantOccupation').value = savedOccupation;
-
-    if (savedRelationship) {
-        const relationshipType = document.getElementById('relationshipType');
-        const options = Array.from(relationshipType.options).map(opt => opt.value);
-
-        if (options.includes(savedRelationship)) {
-            relationshipType.value = savedRelationship;
-        } else {
-            relationshipType.value = '직접입력';
-            document.getElementById('customRelationship').value = savedRelationship;
-            handleRelationshipChange();
+    if (participantPhone && reservations.length > 0) {
+        const existingReservation = reservations.find(r => r.participant_phone === participantPhone);
+        if (existingReservation && existingReservation.operator_id !== operatorId) {
+            alert('이미 다른 실습생에게 예약하셨습니다. 한 실습생에게만 예약 가능합니다.');
+            return;
         }
     }
 
-    const phoneInput = document.getElementById('participantPhone');
-    if (phoneInput) {
-        phoneInput.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
-            if (value.length > 11) value = value.slice(0, 11);
-            e.target.value = formatPhone(value);
-        });
+    sessionStorage.setItem('selectedTimeId', timeId);
+    sessionStorage.setItem('selectedOperatorId', operatorId);
+    sessionStorage.setItem('selectedTimeName', timeName);
+    sessionStorage.setItem('selectedOperatorName', operatorName);
+
+    window.location.href = 'reservation.html';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const participantName = sessionStorage.getItem('participantName');
+    const participantPhone = sessionStorage.getItem('participantPhone');
+
+    if (!participantName || !participantPhone) {
+        alert('참가자 정보를 먼저 입력해주세요.');
+        window.location.href = 'participant.html';
+        return;
     }
+
+    loadTimesAndOperators();
 });
