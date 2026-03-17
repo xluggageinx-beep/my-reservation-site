@@ -3,9 +3,8 @@
 // Vercel + Supabase 공통 유틸
 // ===============================
 
-// Supabase 연결 정보
 const SUPABASE_URL = "https://ewncpxwxgsxgmpmsdsfd.supabase.co";
-const SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY"; // ← 기존 키로 교체
+const SUPABASE_KEY = "여기에_현재_사용중인_SUPABASE_ANON_KEY_그대로_넣기";
 
 // -------------------------------
 // 공통 API 호출
@@ -17,15 +16,13 @@ async function fetchAPI(endpoint, options = {}) {
         "apikey": SUPABASE_KEY,
         "Authorization": `Bearer ${SUPABASE_KEY}`,
         "Content-Type": "application/json",
-        "Prefer": "return=representation"
+        "Prefer": "return=representation",
+        ...(options.headers || {})
     };
 
     const response = await fetch(url, {
         ...options,
-        headers: {
-            ...headers,
-            ...(options.headers || {})
-        }
+        headers
     });
 
     if (!response.ok) {
@@ -59,39 +56,28 @@ function buildQueryString(params = {}) {
     const query = new URLSearchParams();
 
     Object.entries(params).forEach(([key, value]) => {
-        if (
-            value === undefined ||
-            value === null ||
-            value === ""
-        ) {
-            return;
-        }
+        if (value === undefined || value === null || value === "") return;
 
-        // 특수 처리: 정렬
         if (key === "order") {
             query.set("order", value);
             return;
         }
 
-        // limit, offset도 그대로 전달
         if (key === "limit" || key === "offset") {
             query.set(key, String(value));
             return;
         }
 
-        // 배열이면 in.() 문법 사용
         if (Array.isArray(value)) {
             query.set(key, `in.(${value.join(",")})`);
             return;
         }
 
-        // 객체 형태의 고급 필터
         if (typeof value === "object" && value.operator && value.value !== undefined) {
             query.set(key, `${value.operator}.${value.value}`);
             return;
         }
 
-        // 기본 eq
         query.set(key, `eq.${value}`);
     });
 
@@ -100,14 +86,13 @@ function buildQueryString(params = {}) {
 }
 
 // -------------------------------
-// CRUD 함수
+// CRUD
 // -------------------------------
 async function getData(table, params = {}) {
     const query = buildQueryString(params);
     const result = await fetchAPI(`${table}${query}`, {
         method: "GET"
     });
-
     return Array.isArray(result) ? result : [];
 }
 
@@ -121,7 +106,6 @@ async function createData(table, data) {
         method: "POST",
         body: JSON.stringify(data)
     });
-
     return Array.isArray(result) ? result[0] : result;
 }
 
@@ -130,17 +114,17 @@ async function updateData(table, id, data) {
         method: "PATCH",
         body: JSON.stringify(data)
     });
-
     return Array.isArray(result) ? result[0] : result;
 }
 
 async function deleteData(table, id) {
-    return await fetchAPI(`${table}?id=eq.${encodeURIComponent(id)}`, {
+    const result = await fetchAPI(`${table}?id=eq.${encodeURIComponent(id)}`, {
         method: "DELETE",
         headers: {
             "Prefer": "return=representation"
         }
     });
+    return Array.isArray(result) ? result[0] : result;
 }
 
 // 호환용 별칭
@@ -149,7 +133,7 @@ async function createRecord(table, data) {
 }
 
 // -------------------------------
-// UI 공통 함수
+// UI 공통
 // -------------------------------
 function showLoading(containerId) {
     const container = document.getElementById(containerId);
@@ -176,18 +160,16 @@ function showError(containerId, message) {
 
 function showModal(modalId) {
     const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.add("active");
-        modal.style.display = "flex";
-    }
+    if (!modal) return;
+    modal.classList.add("active");
+    modal.style.display = "flex";
 }
 
 function hideModal(modalId) {
     const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.remove("active");
-        modal.style.display = "none";
-    }
+    if (!modal) return;
+    modal.classList.remove("active");
+    modal.style.display = "none";
 }
 
 function showConfirm(message) {
@@ -206,8 +188,16 @@ function navigateToSuccess() {
     window.location.href = "success.html";
 }
 
+function goBack() {
+    if (window.history.length > 1) {
+        window.history.back();
+    } else {
+        goToHome();
+    }
+}
+
 // -------------------------------
-// 포맷/유틸 함수
+// 포맷/유틸
 // -------------------------------
 function generateUUID() {
     if (window.crypto && crypto.randomUUID) {
@@ -227,7 +217,6 @@ function formatPhone(phone) {
     if (digits.length <= 3) return digits;
     if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
     if (digits.length <= 11) return `${digits.slice(0, 3)}-${digits.slice(3, digits.length - 4)}-${digits.slice(-4)}`;
-
     return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
 }
 
@@ -269,10 +258,20 @@ function isPastDate(dateString) {
     return target < today;
 }
 
-// 모달 외부 클릭 시 닫기
+// 모달 바깥 클릭 시 닫기
 document.addEventListener("click", function (e) {
-    const modal = e.target.closest(".modal");
-    if (modal && e.target === modal) {
-        hideModal(modal.id);
+    if (e.target.classList && e.target.classList.contains("modal")) {
+        hideModal(e.target.id);
     }
+});
+
+// 뒤로가기 버튼 자동 연결
+document.addEventListener("DOMContentLoaded", function () {
+    const buttons = Array.from(document.querySelectorAll("button"));
+    buttons.forEach(btn => {
+        const text = (btn.textContent || "").trim();
+        if (text.includes("뒤로가기") && !btn.onclick) {
+            btn.addEventListener("click", goBack);
+        }
+    });
 });
