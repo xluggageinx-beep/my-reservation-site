@@ -11,6 +11,7 @@ let currentCancelReservationId = null;
 let allOperators = [];
 let allTimes = [];
 
+// 예약 확인
 async function checkReservations() {
     const nameInput = document.getElementById('nameInput').value.trim();
     const codeInput = document.getElementById('codeInput').value.trim();
@@ -71,6 +72,7 @@ async function checkReservations() {
     }
 }
 
+// 전체 관리자 뷰
 function displayAdminView() {
     document.getElementById('viewerInfo').innerHTML = `
         <p style="font-size: 1.2em; margin: 0;">
@@ -160,6 +162,7 @@ function displayAdminView() {
     container.innerHTML = html;
 }
 
+// RS 뷰
 function displayRSView() {
     const timeOperators = allOperators.filter(op => op.time_id === currentTime.id);
 
@@ -236,6 +239,7 @@ function displayRSView() {
     container.innerHTML = html;
 }
 
+// 술자 개인 뷰
 function displayOperatorView() {
     const operatorReservations = currentReservations.filter(r =>
         r.operator_id === currentOperator.id
@@ -309,6 +313,7 @@ function displayOperatorView() {
     container.innerHTML = html;
 }
 
+// 예약 취소 확인 모달
 function showCancelConfirmation(reservationId, participantName, reservationDate) {
     currentCancelReservationId = reservationId;
 
@@ -322,6 +327,7 @@ function showCancelConfirmation(reservationId, participantName, reservationDate)
     showModal('cancelModal');
 }
 
+// 예약 취소 실행
 async function confirmCancelReservation() {
     if (!currentCancelReservationId) {
         alert('취소할 예약을 선택해주세요.');
