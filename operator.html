@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>술자모드 - 선문대학교 치위생학과</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <button class="back-button" onclick="goBack()">뒤로가기</button>
+
+    <div class="container">
+        <header class="main-header">
+            <h1>술자모드</h1>
+            <h2>관리자 페이지</h2>
+        </header>
+
+        <main class="main-content">
+            <!-- 패스워드 인증 섹션 -->
+            <div id="authSection">
+                <h3 style="color: var(--primary-color); text-align: center; margin-bottom: 30px;">패스워드 입력</h3>
+                <div class="form-group">
+                    <label for="password">패스워드</label>
+                    <input type="password" id="password" placeholder="패스워드를 입력하세요">
+                </div>
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="authenticate()">확인</button>
+                </div>
+            </div>
+
+            <!-- 관리 섹션 (인증 후 표시) -->
+            <div id="manageSection" style="display: none;">
+                <div class="button-group" style="margin-bottom: 40px;">
+                    <button class="btn btn-primary" onclick="showTimesManagement()">타임 수정</button>
+                    <button class="btn btn-secondary" onclick="showOperatorsManagement()">술자 리스트 수정</button>
+                    <button class="btn btn-secondary" onclick="showReservationsManagement()">예약 관리</button>
+                    <button class="btn btn-secondary" onclick="navigateToReservationCheck()">예약 정보 확인</button>
+                </div>
+
+                <!-- 타임 수정 -->
+                <div id="timesManagement" style="display: none;">
+                    <h3 style="color: var(--primary-color); margin-bottom: 20px;">타임 수정</h3>
+                    
+                    <div class="form-group">
+                        <button class="btn btn-primary" onclick="showAddTimeModal()" id="addTimeBtn">타임 추가</button>
+                        <span style="margin-left: 15px; color: var(--text-light);">현재 타임: <span id="currentTimeCount">0</span>개 (최소 2개, 최대 6개)</span>
+                    </div>
+
+                    <div id="timesList"></div>
+                </div>
+
+                <!-- 술자 리스트 수정 -->
+                <div id="operatorsManagement" style="display: none;">
+                    <h3 style="color: var(--primary-color); margin-bottom: 20px;">술자 리스트 수정</h3>
+                    
+                    <div class="form-group">
+                        <button class="btn btn-primary" onclick="showAddOperatorModal()">술자 추가</button>
+                    </div>
+
+                    <div id="operatorsList"></div>
+                </div>
+
+                <!-- 예약 관리 -->
+                <div id="reservationsManagement" style="display: none;">
+                    <h3 style="color: var(--primary-color); margin-bottom: 20px;">예약 관리</h3>
+                    
+                    <div class="warning-box" style="margin-bottom: 20px;">
+                        <h4>⚠️ 주의</h4>
+                        <p style="margin: 0;">전체 예약 목록을 삭제하면 <strong style="color: var(--danger);">모든 예약이 영구적으로 삭제</strong>됩니다. 이 작업은 되돌릴 수 없습니다.</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button class="btn btn-danger" onclick="deleteAllReservations()">전체 예약 목록 삭제</button>
+                        <span style="margin-left: 15px; color: var(--text-light);">현재 예약: <span id="currentReservationCount">0</span>개</span>
+                    </div>
+
+                    <div id="reservationsSummary"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 타임 추가/수정 모달 -->
+    <div id="timeModal" class="modal">
+        <div class="modal-content">
+            <h3 id="timeModalTitle">타임 추가</h3>
+            <div class="form-group">
+                <label for="timeName">타임 이름</label>
+                <input type="text" id="timeName" placeholder="예: 1T">
+            </div>
+            <div class="form-group">
+                <label for="dayOfWeek">요일</label>
+                <select id="dayOfWeek">
+                    <option value="월">월요일</option>
+                    <option value="화">화요일</option>
+                    <option value="수">수요일</option>
+                    <option value="목">목요일</option>
+                    <option value="금">금요일</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="timeRange">시간 범위</label>
+                <input type="text" id="timeRange" placeholder="예: 09:00-12:00">
+            </div>
+            <div class="form-group">
+                <label>주차 정보</label>
+                <button class="btn btn-secondary" onclick="showDatePicker()">주차 정보 수정</button>
+                <div id="selectedDatesDisplay" style="margin-top: 10px; font-size: 0.9em; color: var(--text-light);"></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="saveTime()">저장</button>
+                <button class="btn btn-secondary" onclick="closeTimeModal()">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 날짜 선택 모달 -->
+    <div id="datePickerModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <h3>주차 정보 수정 (13개 날짜 선택)</h3>
+            <p style="text-align: center; margin-bottom: 20px;">
+                선택된 날짜: <strong id="selectedDateCount">0</strong>/13
+            </p>
+            <div id="calendarContainer"></div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="confirmDates()">확인</button>
+                <button class="btn btn-secondary" onclick="closeDatePicker()">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 술자 추가/수정 모달 -->
+    <div id="operatorModal" class="modal">
+        <div class="modal-content">
+            <h3 id="operatorModalTitle">술자 추가</h3>
+            <div class="form-group">
+                <label for="operatorName">이름</label>
+                <input type="text" id="operatorName" placeholder="이름을 입력하세요">
+            </div>
+            <div class="form-group">
+                <label for="operatorStudentId">학번</label>
+                <input type="text" id="operatorStudentId" placeholder="학번을 입력하세요">
+            </div>
+            <div class="form-group">
+                <label for="operatorPhone">전화번호</label>
+                <input type="tel" id="operatorPhone" placeholder="010-0000-0000">
+            </div>
+            <div class="form-group">
+                <label for="operatorTimeId">소속 타임</label>
+                <select id="operatorTimeId"></select>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="saveOperator()">저장</button>
+                <button class="btn btn-secondary" onclick="closeOperatorModal()">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="main-footer" style="margin-top: 40px;">
+        <p>&copy; 2026 선문대학교 치위생학과. All rights reserved.</p>
+        <p style="font-size: 0.85em; color: #999; margin-top: 5px;">Developed by 치위생학과 23학번 이지민</p>
+    </footer>
+
+    <script src="js/main.js"></script>
+    <script src="js/operator.js"></script>
+</body>
+</html>

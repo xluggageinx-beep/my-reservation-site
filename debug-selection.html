@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>디버그 - 술자 선택</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="main-header">
+            <h1>디버그 페이지</h1>
+            <h2>데이터 로딩 테스트</h2>
+        </header>
+
+        <main class="main-content">
+            <div id="debugInfo" style="background: #f0f0f0; padding: 20px; margin-bottom: 20px;">
+                <h3>디버그 정보</h3>
+                <pre id="debugOutput" style="white-space: pre-wrap;"></pre>
+            </div>
+
+            <button class="btn btn-primary" onclick="testLoadData()">데이터 로드 테스트</button>
+
+            <div id="timesContainer" style="margin-top: 30px;"></div>
+        </main>
+    </div>
+
+    <script src="js/main.js"></script>
+    <script>
+        // 테스트용 참가자 정보 설정
+        sessionStorage.setItem('participantName', '테스트');
+        sessionStorage.setItem('participantPhone', '010-0000-0000');
+
+        function log(message) {
+            const output = document.getElementById('debugOutput');
+            output.textContent += message + '\n';
+            console.log(message);
+        }
+
+        async function testLoadData() {
+            log('=== 데이터 로드 시작 ===');
+            
+            try {
+                // 타임 데이터 로드
+                log('1. 타임 데이터 로드 중...');
+                const timesResponse = await getData('times', { limit: 100 });
+                log('타임 응답: ' + JSON.stringify(timesResponse, null, 2));
+                const times = (timesResponse && timesResponse.data) ? timesResponse.data : [];
+                log('타임 개수: ' + times.length);
+                
+                // 술자 데이터 로드
+                log('2. 술자 데이터 로드 중...');
+                const operatorsResponse = await getData('operators', { limit: 1000 });
+                log('술자 응답: ' + JSON.stringify(operatorsResponse, null, 2));
+                const operators = (operatorsResponse && operatorsResponse.data) ? operatorsResponse.data : [];
+                log('술자 개수: ' + operators.length);
+                
+                // 예약 데이터 로드
+                log('3. 예약 데이터 로드 중...');
+                const reservationsResponse = await getData('reservations', { limit: 10000 });
+                log('예약 응답: ' + JSON.stringify(reservationsResponse, null, 2));
+                const reservations = (reservationsResponse && reservationsResponse.data) ? reservationsResponse.data : [];
+                log('예약 개수: ' + reservations.length);
+                
+                // 데이터 표시
+                displayData(times, operators);
+                
+            } catch (error) {
+                log('오류 발생: ' + error.message);
+                log('오류 스택: ' + error.stack);
+            }
+        }
+
+        function displayData(times, operators) {
+            const container = document.getElementById('timesContainer');
+            container.innerHTML = '<h3>타임 및 술자 목록</h3>';
+            
+            if (times.length === 0) {
+                container.innerHTML += '<p style="color: red;">타임이 없습니다!</p>';
+                return;
+            }
+            
+            times.forEach(time => {
+                const timeOps = operators.filter(op => op.time_id === time.id);
+                
+                let html = `
+                    <div style="border: 2px solid #0059D7; padding: 20px; margin: 10px 0; border-radius: 8px;">
+                        <h4>${time.name} (${time.day_of_week}요일 ${time.time_range})</h4>
+                        <p>술자 수: ${timeOps.length}</p>
+                `;
+                
+                if (timeOps.length > 0) {
+                    html += '<ul>';
+                    timeOps.forEach(op => {
+                        html += `<li>${op.name} (${op.student_id})</li>`;
+                    });
+                    html += '</ul>';
+                } else {
+                    html += '<p style="color: red;">이 타임에 술자가 없습니다!</p>';
+                }
+                
+                html += '</div>';
+                container.innerHTML += html;
+            });
+        }
+
+        // 페이지 로드 시 자동 실행
+        window.addEventListener('DOMContentLoaded', function() {
+            log('페이지 로드 완료');
+            testLoadData();
+        });
+    </script>
+</body>
+</html>

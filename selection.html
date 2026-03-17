@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>술자 선택 - 선문대학교 치위생학과</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <button class="back-button" onclick="goBack()">뒤로가기</button>
+
+    <div class="container">
+        <header class="main-header">
+            <h1>술자 선택</h1>
+            <h2>타임별 술자 리스트</h2>
+        </header>
+
+        <main class="main-content">
+            <div class="notice-box" style="margin-bottom: 30px;">
+                <h4>선택 방법</h4>
+                <p style="margin: 0;">아래 타임별로 나열된 술자 중 원하시는 술자를 선택해주세요.</p>
+            </div>
+
+            <div id="timesContainer"></div>
+
+            <div class="warning-box" style="margin-top: 30px;">
+                <h4>유의사항</h4>
+                <ul>
+                    <li><strong style="color: var(--danger);">한 실습생에게만 예약 가능합니다.</strong></li>
+                    <li>한 실습생에게 1~3회 내원 가능합니다.</li>
+                    <li>술자 선택 후 원하는 날짜를 선택하실 수 있습니다.</li>
+                    <li>스크롤하여 모든 타임과 술자를 확인할 수 있습니다.</li>
+                </ul>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/main.js"></script>
+    <script src="js/selection.js"></script>
+</body>
+</html>

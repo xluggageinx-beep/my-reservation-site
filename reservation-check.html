@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>예약 정보 확인 - 선문대학교 치위생학과</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <button class="back-button" onclick="goBack()">뒤로가기</button>
+
+    <div class="container">
+        <header class="main-header">
+            <h1>예약 정보 확인</h1>
+            <h2>술자/RS 전용</h2>
+        </header>
+
+        <main class="main-content">
+            <!-- 인증 섹션 -->
+            <div id="authSection">
+                <h3 style="color: var(--primary-color); text-align: center; margin-bottom: 20px;">인증 정보 입력</h3>
+                
+                <div class="notice-box" style="margin-bottom: 30px;">
+                    <h4>접근 방법</h4>
+                    <ul>
+                        <li><strong>술자:</strong> 이름 + 학번 입력</li>
+                        <li><strong>RS (타임 담당자):</strong> 타임 이름 (예: 월요일 1T) + 패스워드 (0000) 입력</li>
+                    </ul>
+                </div>
+                
+                <div class="form-group">
+                    <label for="nameInput">이름 / 타임 이름</label>
+                    <input type="text" id="nameInput" placeholder="예: 홍길동 또는 월요일 1T">
+                </div>
+
+                <div class="form-group">
+                    <label for="codeInput">학번 / 패스워드</label>
+                    <input type="text" id="codeInput" placeholder="학번 또는 0000">
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="checkReservations()">확인</button>
+                </div>
+            </div>
+
+            <!-- 예약 정보 표시 섹션 -->
+            <div id="reservationsSection" style="display: none;">
+                <div class="notice-box" style="margin-bottom: 30px;">
+                    <h4 id="viewerInfo"></h4>
+                </div>
+
+                <h3 style="color: var(--primary-color); margin-bottom: 20px;" id="listTitle">예약 목록</h3>
+                <div id="reservationsList"></div>
+
+                <div class="button-group" style="margin-top: 30px;">
+                    <button class="btn btn-secondary" onclick="resetSearch()">다시 검색</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 예약 취소 확인 모달 -->
+    <div id="cancelModal" class="modal">
+        <div class="modal-content">
+            <h3>예약 취소 확인</h3>
+            <div id="cancelConfirmContent" style="padding: 20px 0; font-size: 1.1em; text-align: center; line-height: 2;"></div>
+            <div class="warning-box" style="margin-top: 20px;">
+                <p style="text-align: center; margin: 0;">
+                    <strong style="color: var(--danger);">이 작업은 취소할 수 없습니다.</strong>
+                </p>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-danger" onclick="confirmCancelReservation()">예약 취소</button>
+                <button class="btn btn-secondary" onclick="closeCancelModal()">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="main-footer" style="margin-top: 40px;">
+        <p>&copy; 2026 선문대학교 치위생학과. All rights reserved.</p>
+        <p style="font-size: 0.85em; color: #999; margin-top: 5px;">Developed by 치위생학과 23학번 이지민</p>
+    </footer>
+
+    <script src="js/main.js"></script>
+    <script src="js/reservation-check.js"></script>
+</body>
+</html>
