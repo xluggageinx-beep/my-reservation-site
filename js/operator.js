@@ -49,9 +49,7 @@ async function showTimesManagement() {
     document.getElementById('operatorsManagement').style.display = 'none';
 
     const reservationsManagement = document.getElementById('reservationsManagement');
-    if (reservationsManagement) {
-        reservationsManagement.style.display = 'none';
-    }
+    if (reservationsManagement) reservationsManagement.style.display = 'none';
 
     await loadTimes();
 }
@@ -64,9 +62,7 @@ async function showOperatorsManagement() {
     document.getElementById('operatorsManagement').style.display = 'block';
 
     const reservationsManagement = document.getElementById('reservationsManagement');
-    if (reservationsManagement) {
-        reservationsManagement.style.display = 'none';
-    }
+    if (reservationsManagement) reservationsManagement.style.display = 'none';
 
     await loadOperators();
 }
@@ -79,9 +75,7 @@ async function showReservationsManagement() {
     document.getElementById('operatorsManagement').style.display = 'none';
 
     const reservationsManagement = document.getElementById('reservationsManagement');
-    if (reservationsManagement) {
-        reservationsManagement.style.display = 'block';
-    }
+    if (reservationsManagement) reservationsManagement.style.display = 'block';
 
     await loadReservationsSummary();
 }
@@ -94,28 +88,19 @@ function navigateToReservationCheck() {
 // 타임 데이터 로드
 async function loadTimes() {
     const container = document.getElementById('timesList');
-    if (!container) {
-        console.error('timesList 컨테이너를 찾을 수 없습니다.');
-        return;
-    }
+    if (!container) return;
 
     showLoading('timesList');
 
     try {
         console.log('타임 데이터 로드 시작...');
-        const response = await getData('times', {
-            limit: 1000,
-            order: 'created_at.asc'
-        });
+        const response = await getData('times', { limit: 1000 });
         console.log('타임 응답:', response);
 
         times = Array.isArray(response) ? response : [];
-        console.log(`${times.length}개의 타임 로드 완료`);
 
         const countElement = document.getElementById('currentTimeCount');
-        if (countElement) {
-            countElement.textContent = times.length;
-        }
+        if (countElement) countElement.textContent = times.length;
 
         const addTimeBtn = document.getElementById('addTimeBtn');
         if (addTimeBtn) {
@@ -134,9 +119,6 @@ async function loadTimes() {
         container.innerHTML = `
             <div class="warning-box" style="text-align: center; padding: 30px;">
                 <p><strong>타임 데이터를 불러오는 중 오류가 발생했습니다.</strong></p>
-                <p style="margin-top: 10px; font-size: 0.9em; color: var(--text-light);">
-                    페이지를 새로고침하거나 잠시 후 다시 시도해주세요.
-                </p>
                 <button class="btn btn-primary" onclick="loadTimes()" style="margin-top: 15px;">
                     다시 시도
                 </button>
@@ -238,7 +220,7 @@ async function saveTime() {
 
     try {
         const timeData = {
-            name: name,
+            name,
             day_of_week: dayOfWeek,
             time_range: timeRange,
             selected_dates: selectedDatesForTime
@@ -279,9 +261,7 @@ async function deleteTime(timeId) {
             return;
         }
 
-        if (!showConfirm('정말 이 타임을 삭제하시겠습니까?')) {
-            return;
-        }
+        if (!showConfirm('정말 이 타임을 삭제하시겠습니까?')) return;
 
         await deleteData('times', timeId);
         alert('타임이 삭제되었습니다.');
@@ -321,7 +301,6 @@ function renderCalendar(dayOfWeek) {
     for (let month = 1; month <= 12; month++) {
         const monthDiv = document.createElement('div');
         monthDiv.style.marginBottom = '30px';
-
         monthDiv.innerHTML = `<h5 style="color: var(--primary-color); margin-bottom: 15px;">${currentYear}년 ${month}월</h5>`;
 
         const datesGrid = document.createElement('div');
@@ -368,7 +347,6 @@ function toggleDateSelection(dateString, button) {
             alert('최대 13개의 날짜만 선택할 수 있습니다.');
             return;
         }
-
         selectedDatesForTime.push(dateString);
         button.classList.add('selected');
     }
@@ -379,9 +357,7 @@ function toggleDateSelection(dateString, button) {
 // 선택된 날짜 수 업데이트
 function updateSelectedDateCount() {
     const countEl = document.getElementById('selectedDateCount');
-    if (countEl) {
-        countEl.textContent = selectedDatesForTime.length;
-    }
+    if (countEl) countEl.textContent = selectedDatesForTime.length;
 }
 
 // 선택된 날짜 표시 업데이트
@@ -420,16 +396,10 @@ async function loadOperators() {
     showLoading('operatorsList');
 
     try {
-        const response = await getData('operators', {
-            limit: 1000,
-            order: 'created_at.asc'
-        });
+        const response = await getData('operators', { limit: 1000 });
         operators = Array.isArray(response) ? response : [];
 
-        const timesResponse = await getData('times', {
-            limit: 1000,
-            order: 'created_at.asc'
-        });
+        const timesResponse = await getData('times', { limit: 1000 });
         times = Array.isArray(timesResponse) ? timesResponse : [];
 
         displayOperators();
@@ -593,7 +563,7 @@ async function saveOperator() {
 
     try {
         const operatorData = {
-            name: name,
+            name,
             student_id: studentId,
             phone: formatPhone(phone),
             time_id: timeId
@@ -660,12 +630,8 @@ async function loadReservationsSummary() {
         const response = await getData('reservations', { limit: 5000 });
         const reservations = Array.isArray(response) ? response : [];
 
-        console.log(`${reservations.length}개의 예약 로드 완료`);
-
         const countElement = document.getElementById('currentReservationCount');
-        if (countElement) {
-            countElement.textContent = reservations.length;
-        }
+        if (countElement) countElement.textContent = reservations.length;
 
         const summaryContainer = document.getElementById('reservationsSummary');
         if (!summaryContainer) return;
@@ -686,9 +652,7 @@ async function loadReservationsSummary() {
         reservations.forEach(r => {
             const time = allTimes.find(t => t.id === r.time_id);
             const timeName = time ? time.name : '알수없음';
-            if (!timeStats[timeName]) {
-                timeStats[timeName] = 0;
-            }
+            if (!timeStats[timeName]) timeStats[timeName] = 0;
             timeStats[timeName]++;
         });
 
@@ -722,16 +686,10 @@ async function loadReservationsSummary() {
 
 // 전체 예약 삭제
 async function deleteAllReservations() {
-    if (!confirm('⚠️ 정말로 모든 예약을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다!')) {
-        return;
-    }
-
-    if (!confirm('⚠️⚠️ 최종 확인: 모든 예약 데이터가 영구적으로 삭제됩니다.\n\n계속하시겠습니까?')) {
-        return;
-    }
+    if (!confirm('⚠️ 정말로 모든 예약을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다!')) return;
+    if (!confirm('⚠️⚠️ 최종 확인: 모든 예약 데이터가 영구적으로 삭제됩니다.\n\n계속하시겠습니까?')) return;
 
     try {
-        console.log('전체 예약 삭제 시작...');
         const response = await getData('reservations', { limit: 5000 });
         const reservations = Array.isArray(response) ? response : [];
 
@@ -763,9 +721,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const passwordInput = document.getElementById('password');
     if (passwordInput) {
         passwordInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                authenticate();
-            }
+            if (e.key === 'Enter') authenticate();
         });
     }
 });
