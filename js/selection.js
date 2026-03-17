@@ -1,101 +1,132 @@
-// 술자 선택 페이지 로직 전문
+// 참가자 정보 입력 페이지 로직
 
-let times = [];
-let operators = [];
-let reservations = [];
+function handleRelationshipChange() {
+    const relationshipType = document.getElementById('relationshipType').value;
+    const customGroup = document.getElementById('customRelationshipGroup');
+    const customInput = document.getElementById('customRelationship');
 
-// 요일 순서 맵 (기존 로직 유지)
-const dayOrder = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5 };
+    if (relationshipType === '직접입력') {
+        customGroup.style.display = 'block';
+        customInput.required = true;
+    } else {
+        customGroup.style.display = 'none';
+        customInput.required = false;
+        customInput.value = '';
+    }
+}
 
-/**
- * 데이터 로드
- */
-async function loadTimesAndOperators() {
-    const container = document.getElementById('timesContainer');
-    if (!container) return;
-    
-    showLoading('timesContainer');
-    
-    try {
-        // 1. 타임 데이터 로드
-        const tRes = await getData('times');
-        times = tRes || [];
-        
-        // 2. 술자 데이터 로드 및 [등록 순서] 정렬
-        const oRes = await getData('operators');
-        // id 혹은 created_at을 기준으로 오름차순 정렬하여 등록 순서를 맞춤
-        operators = (oRes || []).sort((a, b) => {
-            const valA = a.created_at || a.id;
-            const valB = b.created_at || b.id;
-            return valA < valB ? -1 : (valA > valB ? 1 : 0);
+async function submitParticipantInfo() {
+    const name = document.getElementById('participantName').value.trim();
+    const birthdate = document.getElementById('participantBirthdate').value.trim();
+    const gender = document.getElementById('participantGender').value;
+    const phone = document.getElementById('participantPhone').value.trim();
+    const address = document.getElementById('participantAddress').value.trim();
+    const occupation = document.getElementById('participantOccupation').value.trim();
+    const relationshipType = document.getElementById('relationshipType').value;
+    const customRelationship = document.getElementById('customRelationship').value.trim();
+
+    if (!name) {
+        alert('이름을 입력해주세요.');
+        return;
+    }
+
+    if (!birthdate) {
+        alert('생년월일을 선택해주세요.');
+        return;
+    }
+
+    if (!gender) {
+        alert('성별을 선택해주세요.');
+        return;
+    }
+
+    if (!phone) {
+        alert('전화번호를 입력해주세요.');
+        return;
+    }
+
+    const digits = phone.replace(/\D/g, '');
+    const phonePattern = /^01[0-9][0-9]{7,8}$/;
+    if (!phonePattern.test(digits)) {
+        alert('올바른 전화번호 형식이 아닙니다. (예: 010-0000-0000)');
+        return;
+    }
+
+    if (!address) {
+        alert('주소를 입력해주세요.');
+        return;
+    }
+
+    if (!occupation) {
+        alert('직업을 입력해주세요.');
+        return;
+    }
+
+    if (!relationshipType) {
+        alert('술자와의 관계를 선택해주세요.');
+        return;
+    }
+
+    if (relationshipType === '직접입력' && !customRelationship) {
+        alert('관계를 직접 입력해주세요.');
+        return;
+    }
+
+    const finalRelationship = relationshipType === '직접입력' ? customRelationship : relationshipType;
+
+    sessionStorage.setItem('participantName', name);
+    sessionStorage.setItem('participantBirthdate', birthdate);
+    sessionStorage.setItem('participantGender', gender);
+    sessionStorage.setItem('participantPhone', formatPhone(phone));
+    sessionStorage.setItem('participantAddress', address);
+    sessionStorage.setItem('participantOccupation', occupation);
+    sessionStorage.setItem('participantRelationship', finalRelationship);
+
+    window.location.href = 'selection.html';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const consentsAgreed = sessionStorage.getItem('consentsAgreed');
+    if (consentsAgreed !== 'true') {
+        alert('먼저 개인정보 활용에 동의해주세요.');
+        window.location.href = 'consent.html';
+        return;
+    }
+
+    const savedName = sessionStorage.getItem('participantName');
+    const savedBirthdate = sessionStorage.getItem('participantBirthdate');
+    const savedGender = sessionStorage.getItem('participantGender');
+    const savedPhone = sessionStorage.getItem('participantPhone');
+    const savedAddress = sessionStorage.getItem('participantAddress');
+    const savedOccupation = sessionStorage.getItem('participantOccupation');
+    const savedRelationship = sessionStorage.getItem('participantRelationship');
+
+    if (savedName) document.getElementById('participantName').value = savedName;
+    if (savedBirthdate) document.getElementById('participantBirthdate').value = savedBirthdate;
+    if (savedGender) document.getElementById('participantGender').value = savedGender;
+    if (savedPhone) document.getElementById('participantPhone').value = savedPhone;
+    if (savedAddress) document.getElementById('participantAddress').value = savedAddress;
+    if (savedOccupation) document.getElementById('participantOccupation').value = savedOccupation;
+
+    if (savedRelationship) {
+        const relationshipType = document.getElementById('relationshipType');
+        const options = Array.from(relationshipType.options).map(opt => opt.value);
+
+        if (options.includes(savedRelationship)) {
+            relationshipType.value = savedRelationship;
+        } else {
+            relationshipType.value = '직접입력';
+            document.getElementById('customRelationship').value = savedRelationship;
+            handleRelationshipChange();
+        }
+    }
+
+    const phoneInput = document.getElementById('participantPhone');
+    if (phoneInput) {
+        phoneInput.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length > 11) value = value.slice(0, 11);
+            e.target.value = formatPhone(value);
         });
-        
-        // 3. 예약 데이터 로드 (중복 체크용)
-        try {
-            const rRes = await getData('reservations');
-            reservations = rRes || [];
-        } catch (resErr) {
-            reservations = [];
-        }
-        
-        displayTimesAndOperators();
-    } catch (error) {
-        showError('timesContainer', '데이터를 불러오는 중 오류가 발생했습니다.');
     }
-}
-
-/**
- * 화면 표시
- */
-function displayTimesAndOperators() {
-    const container = document.getElementById('timesContainer');
-    container.innerHTML = '';
-    
-    // 요일 순서대로 타임 정렬
-    const sortedTimes = [...times].sort((a, b) => (dayOrder[a.day_of_week] || 9) - (dayOrder[b.day_of_week] || 9));
-    
-    sortedTimes.forEach(time => {
-        const timeOperators = operators.filter(op => String(op.time_id) === String(time.id));
-        
-        if (timeOperators.length > 0) {
-            const timeCard = document.createElement('div');
-            timeCard.className = 'time-card';
-            timeCard.innerHTML = `
-                <div class="time-card-header">
-                    <h3>${time.name}</h3>
-                    <p>${time.day_of_week}요일 / ${time.time_range}</p>
-                </div>
-                <div class="operator-list" id="operators-${time.id}"></div>
-            `;
-            container.appendChild(timeCard);
-            
-            const operatorList = document.getElementById(`operators-${time.id}`);
-            timeOperators.forEach(operator => {
-                const operatorItem = document.createElement('div');
-                operatorItem.className = 'operator-item';
-                // '학생' 제거, 이름만 표시
-                operatorItem.innerHTML = `<span style="font-weight: 600;">${operator.name}</span>`;
-                operatorItem.onclick = () => selectOperator(time.id, operator.id, time.name, operator.name);
-                operatorList.appendChild(operatorItem);
-            });
-        }
-    });
-}
-
-function selectOperator(timeId, operatorId, timeName, operatorName) {
-    const participantPhone = sessionStorage.getItem('participantPhone');
-    if (participantPhone && reservations.length > 0) {
-        const existing = reservations.find(r => r.participant_phone === participantPhone);
-        if (existing && existing.operator_id !== operatorId) {
-            alert('이미 다른 실습생에게 예약하셨습니다.');
-            return;
-        }
-    }
-    sessionStorage.setItem('selectedTimeId', timeId);
-    sessionStorage.setItem('selectedOperatorId', operatorId);
-    sessionStorage.setItem('selectedTimeName', timeName);
-    sessionStorage.setItem('selectedOperatorName', operatorName);
-    window.location.href = 'reservation.html';
-}
-
-document.addEventListener('DOMContentLoaded', loadTimesAndOperators);
+});
