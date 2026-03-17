@@ -34,16 +34,14 @@ async function loadTimesAndOperators() {
         console.log('타임/술자 데이터 로드 시작...');
 
         const timesResponse = await getData('times', {
-            limit: 1000,
-            order: 'created_at.asc'
+            limit: 1000
         });
         console.log('times 응답:', timesResponse);
 
         times = Array.isArray(timesResponse) ? timesResponse : [];
 
         const operatorsResponse = await getData('operators', {
-            limit: 1000,
-            order: 'created_at.asc'
+            limit: 1000
         });
         console.log('operators 응답:', operatorsResponse);
 
@@ -123,9 +121,9 @@ function displayTimesAndOperators() {
         hasVisibleTime = true;
 
         timeOperators = timeOperators.sort((a, b) => {
-            const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
-            const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
-            return aCreated - bCreated;
+            const aName = String(a.name || '');
+            const bName = String(b.name || '');
+            return aName.localeCompare(bName, 'ko');
         });
 
         const timeCard = document.createElement('div');
