@@ -47,6 +47,7 @@ async function showTimesManagement() {
 
     document.getElementById('timesManagement').style.display = 'block';
     document.getElementById('operatorsManagement').style.display = 'none';
+
     const reservationsManagement = document.getElementById('reservationsManagement');
     if (reservationsManagement) {
         reservationsManagement.style.display = 'none';
@@ -61,6 +62,7 @@ async function showOperatorsManagement() {
 
     document.getElementById('timesManagement').style.display = 'none';
     document.getElementById('operatorsManagement').style.display = 'block';
+
     const reservationsManagement = document.getElementById('reservationsManagement');
     if (reservationsManagement) {
         reservationsManagement.style.display = 'none';
@@ -75,6 +77,7 @@ async function showReservationsManagement() {
 
     document.getElementById('timesManagement').style.display = 'none';
     document.getElementById('operatorsManagement').style.display = 'none';
+
     const reservationsManagement = document.getElementById('reservationsManagement');
     if (reservationsManagement) {
         reservationsManagement.style.display = 'block';
@@ -85,7 +88,7 @@ async function showReservationsManagement() {
 
 // 예약 정보 확인 페이지로 이동
 function navigateToReservationCheck() {
-    window.location.href = 'reservation-check.html';
+    window.location.href = '/reservation-check.html';
 }
 
 // 타임 데이터 로드
@@ -100,7 +103,10 @@ async function loadTimes() {
 
     try {
         console.log('타임 데이터 로드 시작...');
-        const response = await getData('times', { limit: 1000, order: 'created_at.asc,name.asc' });
+        const response = await getData('times', {
+            limit: 1000,
+            order: 'created_at.asc'
+        });
         console.log('타임 응답:', response);
 
         times = Array.isArray(response) ? response : [];
@@ -111,7 +117,6 @@ async function loadTimes() {
             countElement.textContent = times.length;
         }
 
-        // 타임 추가 버튼 활성화/비활성화
         const addTimeBtn = document.getElementById('addTimeBtn');
         if (addTimeBtn) {
             if (times.length >= 6) {
@@ -126,19 +131,17 @@ async function loadTimes() {
         displayTimes();
     } catch (error) {
         console.error('타임 로드 오류:', error);
-        if (container) {
-            container.innerHTML = `
-                <div class="warning-box" style="text-align: center; padding: 30px;">
-                    <p><strong>타임 데이터를 불러오는 중 오류가 발생했습니다.</strong></p>
-                    <p style="margin-top: 10px; font-size: 0.9em; color: var(--text-light);">
-                        페이지를 새로고침하거나 잠시 후 다시 시도해주세요.
-                    </p>
-                    <button class="btn btn-primary" onclick="loadTimes()" style="margin-top: 15px;">
-                        다시 시도
-                    </button>
-                </div>
-            `;
-        }
+        container.innerHTML = `
+            <div class="warning-box" style="text-align: center; padding: 30px;">
+                <p><strong>타임 데이터를 불러오는 중 오류가 발생했습니다.</strong></p>
+                <p style="margin-top: 10px; font-size: 0.9em; color: var(--text-light);">
+                    페이지를 새로고침하거나 잠시 후 다시 시도해주세요.
+                </p>
+                <button class="btn btn-primary" onclick="loadTimes()" style="margin-top: 15px;">
+                    다시 시도
+                </button>
+            </div>
+        `;
     }
 }
 
@@ -250,6 +253,7 @@ async function saveTime() {
                 alert('최대 6개의 타임만 추가할 수 있습니다.');
                 return;
             }
+
             timeData.id = generateUUID();
             await createData('times', timeData);
             alert('타임이 추가되었습니다.');
@@ -339,7 +343,6 @@ function renderCalendar(dayOfWeek) {
                 }
 
                 dateButton.onclick = () => toggleDateSelection(dateString, dateButton);
-
                 datesGrid.appendChild(dateButton);
             }
         }
@@ -365,6 +368,7 @@ function toggleDateSelection(dateString, button) {
             alert('최대 13개의 날짜만 선택할 수 있습니다.');
             return;
         }
+
         selectedDatesForTime.push(dateString);
         button.classList.add('selected');
     }
@@ -402,7 +406,6 @@ function confirmDates() {
     }
 
     selectedDatesForTime.sort();
-
     updateSelectedDatesDisplay();
     closeDatePicker();
 }
@@ -417,10 +420,16 @@ async function loadOperators() {
     showLoading('operatorsList');
 
     try {
-        const response = await getData('operators', { limit: 1000, order: 'created_at.asc,name.asc' });
+        const response = await getData('operators', {
+            limit: 1000,
+            order: 'created_at.asc'
+        });
         operators = Array.isArray(response) ? response : [];
 
-        const timesResponse = await getData('times', { limit: 1000, order: 'created_at.asc,name.asc' });
+        const timesResponse = await getData('times', {
+            limit: 1000,
+            order: 'created_at.asc'
+        });
         times = Array.isArray(timesResponse) ? timesResponse : [];
 
         displayOperators();
@@ -495,15 +504,18 @@ function showAddOperatorModal() {
 
     const timeSelect = document.getElementById('operatorTimeId');
     timeSelect.innerHTML = '';
+
     times.forEach(time => {
         const timeOperatorsCount = operators.filter(op => op.time_id === time.id).length;
         const option = document.createElement('option');
         option.value = time.id;
         option.textContent = `${time.name} (${time.day_of_week}요일 ${time.time_range}) - ${timeOperatorsCount}/12명`;
+
         if (timeOperatorsCount >= 12) {
             option.disabled = true;
             option.textContent += ' (정원 초과)';
         }
+
         timeSelect.appendChild(option);
     });
 
@@ -522,13 +534,16 @@ function editOperator(operatorId) {
 
     const timeSelect = document.getElementById('operatorTimeId');
     timeSelect.innerHTML = '';
+
     times.forEach(time => {
         const option = document.createElement('option');
         option.value = time.id;
         option.textContent = `${time.name} (${time.day_of_week}요일 ${time.time_range})`;
+
         if (time.id === currentEditingOperator.time_id) {
             option.selected = true;
         }
+
         timeSelect.appendChild(option);
     });
 
@@ -653,47 +668,45 @@ async function loadReservationsSummary() {
         }
 
         const summaryContainer = document.getElementById('reservationsSummary');
-        if (summaryContainer) {
-            if (reservations.length === 0) {
-                summaryContainer.innerHTML = `
-                    <div class="notice-box" style="text-align: center; padding: 40px;">
-                        <p>현재 예약이 없습니다.</p>
-                    </div>
-                `;
-            } else {
-                const timesResponse = await getData('times', { limit: 1000 });
-                const allTimes = Array.isArray(timesResponse) ? timesResponse : [];
+        if (!summaryContainer) return;
 
-                const operatorsResponse = await getData('operators', { limit: 1000 });
-                const allOperators = Array.isArray(operatorsResponse) ? operatorsResponse : [];
-
-                const timeStats = {};
-                reservations.forEach(r => {
-                    const time = allTimes.find(t => t.id === r.time_id);
-                    const timeName = time ? time.name : '알수없음';
-                    if (!timeStats[timeName]) {
-                        timeStats[timeName] = 0;
-                    }
-                    timeStats[timeName]++;
-                });
-
-                let html = '<div class="time-card">';
-                html += '<h4 style="color: var(--primary-color);">타임별 예약 현황</h4>';
-                html += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">';
-
-                for (const [timeName, count] of Object.entries(timeStats)) {
-                    html += `
-                        <div style="padding: 15px; background-color: #f8f9fa; border-radius: 5px; text-align: center;">
-                            <div style="font-weight: 600; margin-bottom: 5px;">${timeName}</div>
-                            <div style="font-size: 1.5em; color: var(--primary-color);">${count}건</div>
-                        </div>
-                    `;
-                }
-
-                html += '</div></div>';
-                summaryContainer.innerHTML = html;
-            }
+        if (reservations.length === 0) {
+            summaryContainer.innerHTML = `
+                <div class="notice-box" style="text-align: center; padding: 40px;">
+                    <p>현재 예약이 없습니다.</p>
+                </div>
+            `;
+            return;
         }
+
+        const timesResponse = await getData('times', { limit: 1000 });
+        const allTimes = Array.isArray(timesResponse) ? timesResponse : [];
+
+        const timeStats = {};
+        reservations.forEach(r => {
+            const time = allTimes.find(t => t.id === r.time_id);
+            const timeName = time ? time.name : '알수없음';
+            if (!timeStats[timeName]) {
+                timeStats[timeName] = 0;
+            }
+            timeStats[timeName]++;
+        });
+
+        let html = '<div class="time-card">';
+        html += '<h4 style="color: var(--primary-color);">타임별 예약 현황</h4>';
+        html += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">';
+
+        for (const [timeName, count] of Object.entries(timeStats)) {
+            html += `
+                <div style="padding: 15px; background-color: #f8f9fa; border-radius: 5px; text-align: center;">
+                    <div style="font-weight: 600; margin-bottom: 5px;">${timeName}</div>
+                    <div style="font-size: 1.5em; color: var(--primary-color);">${count}건</div>
+                </div>
+            `;
+        }
+
+        html += '</div></div>';
+        summaryContainer.innerHTML = html;
     } catch (error) {
         console.error('예약 요약 로드 오류:', error);
         const summaryContainer = document.getElementById('reservationsSummary');
