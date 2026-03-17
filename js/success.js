@@ -1,3 +1,5 @@
+// 예약 완료 페이지 로직
+
 function displayReservationInfo() {
     const participantName = sessionStorage.getItem('participantName');
     const participantPhone = sessionStorage.getItem('participantPhone');
@@ -20,6 +22,14 @@ function displayReservationInfo() {
     `;
 }
 
+function clearTemporaryReservationSession() {
+    sessionStorage.removeItem('selectedTimeId');
+    sessionStorage.removeItem('selectedOperatorId');
+    sessionStorage.removeItem('selectedTimeName');
+    sessionStorage.removeItem('selectedOperatorName');
+    sessionStorage.removeItem('reservationDate');
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const reservationId = sessionStorage.getItem('reservationId');
 
@@ -30,10 +40,5 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     displayReservationInfo();
-
-    sessionStorage.removeItem('selectedTimeId');
-    sessionStorage.removeItem('selectedOperatorId');
-    sessionStorage.removeItem('selectedTimeName');
-    sessionStorage.removeItem('selectedOperatorName');
-    sessionStorage.removeItem('reservationDate');
+    clearTemporaryReservationSession();
 });
