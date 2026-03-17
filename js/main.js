@@ -1,13 +1,18 @@
-// [보안 유지] Supabase 연결 설정
-const SUPABASE_URL = "https://ewncpxwxgsxgmpmsdsfd.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3bmNweHd4Z3N4Z21wbXNkc2ZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MjIwNDEsImV4cCI6MjA4OTI5ODA0MX0.EZWZNL86U-DQfWE3v-XMHqigZWHRLzDlE-lrqNGwJ2k";
+// ===============================
+// main.js
+// Vercel + Supabase 공통 유틸
+// ===============================
 
-/**
- * 1. 서버 통신 엔진 (Supabase 최적화)
- * 기존 fetchAPI와 호환성을 유지하면서 실제 DB와 연결합니다.
- */
+// Supabase 연결 정보
+const SUPABASE_URL = "https://ewncpxwxgsxgmpmsdsfd.supabase.co";
+const SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY"; // ← 기존 키로 교체
+
+// -------------------------------
+// 공통 API 호출
+// -------------------------------
 async function fetchAPI(endpoint, options = {}) {
     const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
+
     const headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": `Bearer ${SUPABASE_KEY}`,
@@ -15,129 +20,259 @@ async function fetchAPI(endpoint, options = {}) {
         "Prefer": "return=representation"
     };
 
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(url, {
+        ...options,
+        headers: {
+            ...headers,
+            ...(options.headers || {})
+        }
+    });
+
     if (!response.ok) {
-        const errorData = await response.json();
-        console.error("DB 에러 상세:", errorData);
-        throw new Error(`DB 통신 실패: ${response.status}`);
+        let errorText = "";
+        try {
+            errorText = await response.text();
+        } catch (_) {
+            errorText = "알 수 없는 오류";
+        }
+
+        console.error("Supabase API 오류:", {
+            endpoint,
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText
+        });
+
+        throw new Error(`DB 연결 실패: ${response.status}`);
     }
-    return response.status === 204 ? null : await response.json();
+
+    if (response.status === 204) return null;
+
+    const text = await response.text();
+    return text ? JSON.parse(text) : null;
 }
 
-// 데이터 조회 (기존 getData와 100% 호환)
+// -------------------------------
+// 쿼리 문자열 생성
+// -------------------------------
+function buildQueryString(params = {}) {
+    const query = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return;
+        }
+
+        // 특수 처리: 정렬
+        if (key === "order") {
+            query.set("order", value);
+            return;
+        }
+
+        // limit, offset도 그대로 전달
+        if (key === "limit" || key === "offset") {
+            query.set(key, String(value));
+            return;
+        }
+
+        // 배열이면 in.() 문법 사용
+        if (Array.isArray(value)) {
+            query.set(key, `in.(${value.join(",")})`);
+            return;
+        }
+
+        // 객체 형태의 고급 필터
+        if (typeof value === "object" && value.operator && value.value !== undefined) {
+            query.set(key, `${value.operator}.${value.value}`);
+            return;
+        }
+
+        // 기본 eq
+        query.set(key, `eq.${value}`);
+    });
+
+    const qs = query.toString();
+    return qs ? `?${qs}` : "";
+}
+
+// -------------------------------
+// CRUD 함수
+// -------------------------------
 async function getData(table, params = {}) {
-    let query = "";
-    if (params.id) {
-        query = `?id=eq.${params.id}`;
-    }
-    // Supabase는 배열로 응답하므로 그대로 반환
-    return await fetchAPI(table + query);
+    const query = buildQueryString(params);
+    const result = await fetchAPI(`${table}${query}`, {
+        method: "GET"
+    });
+
+    return Array.isArray(result) ? result : [];
 }
 
-// 단일 레코드 조회
 async function getRecord(table, id) {
-    const data = await getData(table, { id });
-    return (data && data.length > 0) ? data[0] : null;
+    const rows = await getData(table, { id, limit: 1 });
+    return rows.length > 0 ? rows[0] : null;
 }
 
-// 데이터 생성
 async function createData(table, data) {
-    return await fetchAPI(table, {
-        method: 'POST',
+    const result = await fetchAPI(table, {
+        method: "POST",
         body: JSON.stringify(data)
     });
+
+    return Array.isArray(result) ? result[0] : result;
 }
 
-// 데이터 수정
 async function updateData(table, id, data) {
-    return await fetchAPI(`${table}?id=eq.${id}`, {
-        method: 'PATCH',
+    const result = await fetchAPI(`${table}?id=eq.${encodeURIComponent(id)}`, {
+        method: "PATCH",
         body: JSON.stringify(data)
     });
+
+    return Array.isArray(result) ? result[0] : result;
 }
 
-// 데이터 삭제
 async function deleteData(table, id) {
-    return await fetchAPI(`${table}?id=eq.${id}`, {
-        method: 'DELETE'
+    return await fetchAPI(`${table}?id=eq.${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: {
+            "Prefer": "return=representation"
+        }
     });
 }
 
-/**
- * 2. 원본 UI 세부 기능 복구 (하나도 빠짐없이 유지)
- */
+// 호환용 별칭
+async function createRecord(table, data) {
+    return await createData(table, data);
+}
 
-// 로딩 표시 기능
+// -------------------------------
+// UI 공통 함수
+// -------------------------------
 function showLoading(containerId) {
     const container = document.getElementById(containerId);
     if (container) {
         container.innerHTML = `
             <div style="text-align: center; padding: 40px;">
                 <div class="loading"></div>
-                <p style="margin-top: 20px; color: #666;">데이터를 불러오는 중...</p>
+                <p style="margin-top: 20px;">로딩 중...</p>
             </div>
         `;
     }
 }
 
-// 에러 표시 기능
 function showError(containerId, message) {
     const container = document.getElementById(containerId);
     if (container) {
         container.innerHTML = `
-            <div class="error-box" style="padding: 20px; text-align: center; color: #e53e3e;">
+            <div class="warning-box" style="text-align: center;">
                 <p>${message}</p>
-                <button onclick="location.reload()" style="margin-top:10px; padding:5px 10px; cursor:pointer;">새로고침</button>
             </div>
         `;
     }
 }
 
-// 모달 제어 (중앙 정렬 스타일 포함)
 function showModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
-        modal.style.display = 'block';
-        document.body.style.overflow = 'hidden'; // 배경 스크롤 방지
+        modal.classList.add("active");
+        modal.style.display = "flex";
     }
 }
 
 function hideModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
+        modal.classList.remove("active");
+        modal.style.display = "none";
     }
 }
 
-// 날짜 포맷 변환 (YYYY-MM-DD -> YYYY년 MM월 DD일)
-function formatDateDisplay(dateStr) {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr;
-    return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+function showConfirm(message) {
+    return window.confirm(message);
 }
 
-// 전화번호 포맷팅 (01012345678 -> 010-1234-5678)
-function formatPhone(phone) {
-    if (!phone) return '';
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 11) {
-        return cleaned.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
-    }
-    return phone;
+function goToHome() {
+    window.location.href = "index.html";
 }
 
-// 고유 ID 생성 (UUID)
+function navigateToSelection() {
+    window.location.href = "selection.html";
+}
+
+function navigateToSuccess() {
+    window.location.href = "success.html";
+}
+
+// -------------------------------
+// 포맷/유틸 함수
+// -------------------------------
 function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    if (window.crypto && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === "x" ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
 }
 
-// 페이지 이동 함수
-function goBack() { window.history.back(); }
-function navigateToSuccess() { window.location.href = 'success.html'; }
+function formatPhone(phone) {
+    const digits = String(phone || "").replace(/\D/g, "");
 
-console.log("선문대 치위생 시스템: Supabase 엔진 정상 작동 중");
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    if (digits.length <= 11) return `${digits.slice(0, 3)}-${digits.slice(3, digits.length - 4)}-${digits.slice(-4)}`;
+
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+}
+
+function formatDate(date) {
+    const d = (date instanceof Date) ? date : new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function formatDateShort(dateString) {
+    if (!dateString) return "";
+    const [year, month, day] = dateString.split("-");
+    return `${month}/${day}`;
+}
+
+function formatDateDisplay(dateString) {
+    if (!dateString) return "";
+
+    const date = new Date(`${dateString}T00:00:00`);
+    const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
+
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const weekday = weekdays[date.getDay()];
+
+    return `${year}년 ${month}월 ${day}일 (${weekday})`;
+}
+
+function isPastDate(dateString) {
+    if (!dateString) return false;
+
+    const target = new Date(`${dateString}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return target < today;
+}
+
+// 모달 외부 클릭 시 닫기
+document.addEventListener("click", function (e) {
+    const modal = e.target.closest(".modal");
+    if (modal && e.target === modal) {
+        hideModal(modal.id);
+    }
+});
