@@ -13,12 +13,12 @@ function checkAllConsents() {
     const healthInfoConsent = document.getElementById('consentHealthInfo').checked;
     const thirdPartyConsent = document.getElementById('consentThirdParty').checked;
     const programConsent = document.getElementById('consentProgram').checked;
-    
+
     consentStatus.personalInfo = personalInfoConsent;
     consentStatus.healthInfo = healthInfoConsent;
     consentStatus.thirdParty = thirdPartyConsent;
     consentStatus.program = programConsent;
-    
+
     const allChecked = personalInfoConsent && healthInfoConsent && thirdPartyConsent && programConsent;
     document.getElementById('nextButton').disabled = !allChecked;
 }
@@ -55,15 +55,22 @@ function proceedToInfo() {
 
 // 페이지 로드 시
 document.addEventListener('DOMContentLoaded', function() {
-    // 이미 동의한 경우 체크박스 설정
     const consentsAgreed = sessionStorage.getItem('consentsAgreed');
+
     if (consentsAgreed === 'true') {
         document.getElementById('consentPersonalInfo').checked = true;
         document.getElementById('consentHealthInfo').checked = true;
         document.getElementById('consentThirdParty').checked = true;
         document.getElementById('consentProgram').disabled = false;
         document.getElementById('consentProgram').checked = true;
-        consentStatus = { personalInfo: true, healthInfo: true, thirdParty: true, program: true };
+
+        consentStatus = {
+            personalInfo: true,
+            healthInfo: true,
+            thirdParty: true,
+            program: true
+        };
+
         checkAllConsents();
     }
 });
