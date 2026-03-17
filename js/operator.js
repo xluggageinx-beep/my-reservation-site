@@ -9,10 +9,28 @@ let reservations = [];
 let currentEditingTime = null;
 let currentEditingOperator = null;
 let selectedDatesForTime = [];
-let currentEditingTimeForDates = null;
+
+function setActiveTab(tabName) {
+    const tabButtons = Array.from(document.querySelectorAll('button')).filter(btn => {
+        const text = (btn.textContent || '').trim();
+        return ['타임 수정', '술자 리스트 수정', '예약 관리', '예약 정보 확인'].includes(text);
+    });
+
+    tabButtons.forEach(btn => {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+    });
+
+    const target = tabButtons.find(btn => (btn.textContent || '').trim() === tabName);
+    if (target) {
+        target.classList.remove('btn-secondary');
+        target.classList.add('btn-primary');
+    }
+}
 
 async function authenticate() {
-    const password = document.getElementById('password').value;
+    const passwordInput = document.getElementById('password');
+    const password = passwordInput ? passwordInput.value.trim() : '';
 
     if (password === OPERATOR_PASSWORD) {
         isAuthenticated = true;
@@ -21,11 +39,12 @@ async function authenticate() {
         await showTimesManagement();
     } else {
         alert('패스워드가 올바르지 않습니다.');
-        document.getElementById('password').value = '';
+        if (passwordInput) passwordInput.value = '';
     }
 }
 
 async function showTimesManagement() {
+    setActiveTab('타임 수정');
     document.getElementById('timesManagement').style.display = 'block';
     document.getElementById('operatorsManagement').style.display = 'none';
 
@@ -36,6 +55,7 @@ async function showTimesManagement() {
 }
 
 async function showOperatorsManagement() {
+    setActiveTab('술자 리스트 수정');
     document.getElementById('timesManagement').style.display = 'none';
     document.getElementById('operatorsManagement').style.display = 'block';
 
@@ -46,6 +66,7 @@ async function showOperatorsManagement() {
 }
 
 async function showReservationsManagement() {
+    setActiveTab('예약 관리');
     document.getElementById('timesManagement').style.display = 'none';
     document.getElementById('operatorsManagement').style.display = 'none';
 
@@ -56,15 +77,13 @@ async function showReservationsManagement() {
 }
 
 function navigateToReservationCheck() {
+    setActiveTab('예약 정보 확인');
     window.location.href = 'reservation-check.html';
 }
 
 async function loadTimes() {
     const container = document.getElementById('timesList');
-    if (!container) {
-        console.error('timesList 컨테이너를 찾을 수 없습니다.');
-        return;
-    }
+    if (!container) return;
 
     showLoading('timesList');
 
@@ -107,6 +126,7 @@ async function loadTimes() {
 
 function displayTimes() {
     const container = document.getElementById('timesList');
+    if (!container) return;
 
     if (times.length === 0) {
         container.innerHTML = '<p style="text-align: center; padding: 40px; color: var(--text-light);">등록된 타임이 없습니다.</p>';
@@ -172,7 +192,7 @@ function editTime(timeId) {
     document.getElementById('timeRange').value = currentEditingTime.time_range || '';
 
     updateSelectedDatesDisplay();
-    updateSelectedDateCount();
+    document.getElementById('selectedDateCount').textContent = selectedDatesForTime.length;
 
     showModal('timeModal');
 }
@@ -208,7 +228,6 @@ async function saveTime() {
                 alert('최대 6개의 타임만 추가할 수 있습니다.');
                 return;
             }
-
             timeData.id = generateUUID();
             await createData('times', timeData);
             alert('타임이 추가되었습니다.');
@@ -251,8 +270,6 @@ function closeTimeModal() {
 
 function showDatePicker() {
     const dayOfWeek = document.getElementById('dayOfWeek').value;
-    currentEditingTimeForDates = dayOfWeek;
-
     renderCalendar(dayOfWeek);
     showModal('datePickerModal');
 }
@@ -260,7 +277,6 @@ function showDatePicker() {
 function renderCalendar(dayOfWeek) {
     const container = document.getElementById('calendarContainer');
     const currentYear = new Date().getFullYear();
-
     const dayMap = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5 };
     const targetDay = dayMap[dayOfWeek];
 
@@ -300,7 +316,7 @@ function renderCalendar(dayOfWeek) {
         }
     }
 
-    updateSelectedDateCount();
+    document.getElementById('selectedDateCount').textContent = selectedDatesForTime.length;
 }
 
 function toggleDateSelection(dateString, button) {
@@ -314,21 +330,16 @@ function toggleDateSelection(dateString, button) {
             alert('최대 13개의 날짜만 선택할 수 있습니다.');
             return;
         }
-
         selectedDatesForTime.push(dateString);
         button.classList.add('selected');
     }
 
-    updateSelectedDateCount();
-}
-
-function updateSelectedDateCount() {
-    const el = document.getElementById('selectedDateCount');
-    if (el) el.textContent = selectedDatesForTime.length;
+    document.getElementById('selectedDateCount').textContent = selectedDatesForTime.length;
 }
 
 function updateSelectedDatesDisplay() {
     const display = document.getElementById('selectedDatesDisplay');
+    if (!display) return;
 
     if (selectedDatesForTime.length === 0) {
         display.textContent = '선택된 날짜가 없습니다.';
@@ -340,11 +351,6 @@ function updateSelectedDatesDisplay() {
 }
 
 function confirmDates() {
-    if (selectedDatesForTime.length === 0) {
-        alert('최소 1개 이상의 날짜를 선택해주세요.');
-        return;
-    }
-
     selectedDatesForTime.sort();
     updateSelectedDatesDisplay();
     closeDatePicker();
@@ -377,6 +383,7 @@ async function loadOperators() {
 
 function displayOperators() {
     const container = document.getElementById('operatorsList');
+    if (!container) return;
 
     if (operators.length === 0) {
         container.innerHTML = '<p style="text-align: center; padding: 40px; color: var(--text-light);">등록된 술자가 없습니다.</p>';
@@ -584,7 +591,7 @@ function closeOperatorModal() {
 
 async function loadReservationsSummary() {
     try {
-        const reservations = await getData('reservations', { limit: 5000 });
+        reservations = await getData('reservations', { limit: 5000 });
 
         const countElement = document.getElementById('currentReservationCount');
         if (countElement) countElement.textContent = reservations.length;
@@ -640,13 +647,8 @@ async function loadReservationsSummary() {
 }
 
 async function deleteAllReservations() {
-    if (!confirm('⚠️ 정말로 모든 예약을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다!')) {
-        return;
-    }
-
-    if (!confirm('⚠️⚠️ 최종 확인: 모든 예약 데이터가 영구적으로 삭제됩니다.\n\n계속하시겠습니까?')) {
-        return;
-    }
+    if (!confirm('⚠️ 정말로 모든 예약을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다!')) return;
+    if (!confirm('⚠️⚠️ 최종 확인: 모든 예약 데이터가 영구적으로 삭제됩니다.\n\n계속하시겠습니까?')) return;
 
     try {
         const allReservations = await getData('reservations', { limit: 5000 });
@@ -678,9 +680,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const passwordInput = document.getElementById('password');
     if (passwordInput) {
         passwordInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                authenticate();
-            }
+            if (e.key === 'Enter') authenticate();
         });
     }
 });
