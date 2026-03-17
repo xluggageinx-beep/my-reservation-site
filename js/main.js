@@ -23,15 +23,14 @@ async function fetchAPI(endpoint, options = {}) {
     return await response.json();
 }
 
-// 데이터를 가져오는 함수
+// 데이터를 가져오는 함수 (Supabase는 결과가 바로 배열임)
 async function getData(table, params = {}) {
     let query = "";
     if (params.id) {
         query = `?id=eq.${params.id}`;
     }
-    // Supabase는 데이터를 배열로 바로 반환하므로 .data 처리를 없앱니다.
-    const result = await fetchAPI(table + query);
-    return result; 
+    // 기존 .data 제거를 위해 결과를 바로 반환
+    return await fetchAPI(table + query);
 }
 
 // 단일 레코드 가져오기
@@ -63,7 +62,7 @@ async function deleteData(table, id) {
     });
 }
 
-// --- 아래는 기존 UI 함수 (그대로 유지) ---
+// --- 공통 UI 기능 ---
 function showLoading(containerId) {
     const container = document.getElementById(containerId);
     if (container) {
@@ -108,4 +107,8 @@ function generateUUID() {
         var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
+}
+
+function goBack() {
+    window.history.back();
 }
