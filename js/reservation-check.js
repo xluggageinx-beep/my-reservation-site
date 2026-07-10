@@ -4,7 +4,8 @@ const RS_PASSWORD = '0000';
 const ADMIN_KEYWORD = '관리자';
 
 let viewMode = null; // 'operator', 'rs', 'admin'
-let currentOperator = null;
+let currentOperator = null;   // 단일 술자 (레거시, RS/admin에서만 사용)
+let currentOperators = [];    // 복수 술자 (활성 학기 내 동일 학생)
 let currentTime = null;
 let currentReservations = [];
 let currentCancelReservationId = null;
@@ -140,25 +141,31 @@ async function checkReservations() {
             const inputName = normalizeText(nameInput);
             const inputStudentId = normalizeDigits(codeInput);
 
-            currentOperator = allOperators.find(op => {
+            // 활성 학기 ID 목록
+            const activeSemIds = new Set(allSemesters.filter(s => s.is_active).map(s => s.id));
+
+            // 활성 학기 내 타임 ID 목록
+            const activeTimeIds = activeSemIds.size > 0
+                ? new Set(allTimes.filter(t => activeSemIds.has(t.semester_id)).map(t => t.id))
+                : null; // null이면 전체 허용 (학기 정보 없을 때 폴백)
+
+            // 활성 학기 범위 내에서 이름+학번 매칭 술자 전체
+            currentOperators = allOperators.filter(op => {
                 const opName = normalizeText(op.name);
                 const opStudentId = normalizeDigits(op.student_id);
-                return opName === inputName && opStudentId === inputStudentId;
+                const nameMatch = opName === inputName && opStudentId === inputStudentId;
+                if (!nameMatch) return false;
+                if (activeTimeIds === null) return true;
+                return activeTimeIds.has(op.time_id);
             });
 
-            if (!currentOperator) {
-                console.log('입력 이름:', inputName);
-                console.log('입력 학번:', inputStudentId);
-                console.log('비교용 operators:', allOperators.map(op => ({
-                    name: normalizeText(op.name),
-                    student_id: normalizeDigits(op.student_id),
-                    raw_student_id: op.student_id
-                })));
-
-                alert('일치하는 술자 정보를 찾을 수 없습니다. 이름과 학번을 확인해주세요.');
+            if (currentOperators.length === 0) {
+                alert('활성 학기에서 일치하는 술자 정보를 찾을 수 없습니다.\n이름과 학번을 확인해주세요.');
                 return;
             }
 
+            // 레거시 단일 참조 유지
+            currentOperator = currentOperators[0];
             viewMode = 'operator';
             displayOperatorView();
         }
@@ -366,29 +373,61 @@ function displayRSView() {
 }
 
 // -------------------------------
+// 만나이 계산 유틸
+// -------------------------------
+function calcKoreanAge(birthdateStr) {
+    if (!birthdateStr || birthdateStr === '-' || birthdateStr === '미입력') return null;
+    // YYYY-MM-DD 또는 YYYYMMDD 형식 처리
+    const clean = String(birthdateStr).replace(/\D/g, '');
+    if (clean.length < 8) return null;
+    const year  = parseInt(clean.slice(0, 4));
+    const month = parseInt(clean.slice(4, 6)) - 1;
+    const day   = parseInt(clean.slice(6, 8));
+    const birth = new Date(year, month, day);
+    if (isNaN(birth.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const notYet = today.getMonth() < birth.getMonth() ||
+        (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate());
+    if (notYet) age--;
+    return age < 0 ? null : age;
+}
+
+// -------------------------------
 // 술자 개인 뷰
 // -------------------------------
 function displayOperatorView() {
-    const operatorReservations = currentReservations.filter(r =>
-        r.operator_id === currentOperator.id
-    );
+    // currentOperators 배열(활성 학기 내 동일 이름+학번) 전체를 표시
+    const operators = currentOperators.length > 0 ? currentOperators : (currentOperator ? [currentOperator] : []);
 
-    const time = allTimes.find(t => t.id === currentOperator.time_id);
+    // 헤더: 첫 번째 술자 기준
+    const first = operators[0];
+    const firstTime = allTimes.find(t => t.id === first.time_id);
+    const firstSem  = allSemesters.find(s => s.id === first.semester_id);
+
+    const semLabels = operators.map(op => {
+        const sem = allSemesters.find(s => s.id === op.semester_id);
+        const t   = allTimes.find(t => t.id === op.time_id);
+        return sem ? `${sem.name} ${t ? t.name : ''}` : (t ? t.name : '');
+    }).filter(Boolean);
 
     document.getElementById('viewerInfo').innerHTML = `
         <p style="font-size: 1.2em; margin: 0;">
-            <strong>${currentOperator.name}</strong> (${currentOperator.student_id})
+            <strong>${first.name}</strong> (${first.student_id})
         </p>
-        <p style="margin: 10px 0 0 0; color: var(--text-light);">
-            ${time ? `${time.name} ${time.day_of_week}요일 ${time.time_range}` : ''}
+        <p style="margin: 8px 0 0 0; color: var(--text-light); font-size:0.9em;">
+            ${semLabels.join(' · ')}
         </p>
     `;
 
     document.getElementById('listTitle').textContent = '내 예약 목록';
-
     const container = document.getElementById('reservationsList');
 
-    if (operatorReservations.length === 0) {
+    // 모든 매칭 술자의 예약 수집
+    const operatorIds = new Set(operators.map(op => op.id));
+    const allOpReservations = currentReservations.filter(r => operatorIds.has(r.operator_id));
+
+    if (allOpReservations.length === 0) {
         container.innerHTML = `
             <div class="notice-box" style="text-align: center; padding: 40px;">
                 <p>아직 예약이 없습니다.</p>
@@ -398,53 +437,79 @@ function displayOperatorView() {
         return;
     }
 
-    operatorReservations.sort((a, b) =>
-        new Date(a.reservation_date) - new Date(b.reservation_date)
-    );
+    // 날짜 오름차순 정렬
+    allOpReservations.sort((a, b) => new Date(a.reservation_date) - new Date(b.reservation_date));
 
     let html = '';
 
-    operatorReservations.forEach((reservation, index) => {
+    allOpReservations.forEach((reservation) => {
         const isPast = isPastDate(reservation.reservation_date);
-        const cardStyle = isPast ? 'opacity: 0.6; background-color: #f5f5f5;' : '';
 
         const participantName = getReservationField(reservation, ['participant_name', 'name'], '미입력');
-        const birthdate = getReservationField(reservation, ['participant_birthdate', 'birthdate', 'participant_birth'], '미입력');
-        const gender = getReservationField(reservation, ['participant_gender', 'gender'], '미입력');
-        const phone = getReservationField(reservation, ['participant_phone', 'phone'], '미입력');
-        const address = getReservationField(reservation, ['participant_address', 'address'], '미입력');
+        const birthdate  = getReservationField(reservation, ['participant_birthdate', 'birthdate', 'participant_birth'], '');
+        const gender     = getReservationField(reservation, ['participant_gender', 'gender'], '');
+        const phone      = getReservationField(reservation, ['participant_phone', 'phone'], '미입력');
+        const address    = getReservationField(reservation, ['participant_address', 'address'], '미입력');
         const occupation = getReservationField(reservation, ['participant_occupation', 'occupation'], '미입력');
         const relationship = getReservationField(reservation, ['participant_relationship', 'relationship'], '미입력');
 
+        // 만나이 계산
+        const age = calcKoreanAge(birthdate);
+        const birthdateDisplay = birthdate || '미입력';
+        const ageDisplay = age !== null ? `${age}세` : '';
+        const genderDisplay = gender || '';
+
+        // 카드 제목: "예약 일자 — 대상자 이름 (생년월일 / 나이 / 성별)"
+        const metaParts = [birthdateDisplay, ageDisplay, genderDisplay].filter(v => v && v !== '미입력');
+        const metaStr = metaParts.length > 0 ? ` (${metaParts.join(' / ')})` : '';
+        const cardTitle = `${formatDateDisplay(reservation.reservation_date)} — ${participantName}${metaStr}`;
+
+        // 상태 배지
+        const statusBadge = isPast
+            ? `<span style="font-size:0.78em;padding:3px 10px;border-radius:20px;background:#eee;color:#888;font-weight:600;">완료</span>`
+            : `<span style="font-size:0.78em;padding:3px 10px;border-radius:20px;background:#e8f4ff;color:var(--primary-color);font-weight:600;">예정</span>`;
+
+        // 삭제 버튼 (항상 표시)
+        const deleteBtn = `
+            <button onclick="showCancelConfirmation('${reservation.id}', '${participantName.replace(/'/g, "\\'")}', '${reservation.reservation_date}')"
+                style="background:var(--danger);color:#fff;border:none;border-radius:8px;
+                       width:32px;height:32px;font-size:1.1em;cursor:pointer;
+                       display:flex;align-items:center;justify-content:center;flex-shrink:0;"
+                title="예약 삭제">🗑️</button>`;
+
         html += `
-            <div class="time-card" style="${cardStyle}">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
-                    <h4 style="color: var(--primary-color); margin: 0;">예약 ${index + 1}</h4>
-                    ${isPast ? '<span style="color: var(--text-light); font-size: 0.9em;">완료된 예약</span>' : ''}
+            <div class="time-card" style="margin-bottom:14px;padding:16px 18px;${isPast ? 'opacity:0.72;' : ''}">
+                <!-- 카드 헤더 -->
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:14px;">
+                    <div style="font-size:0.95em;font-weight:700;color:${isPast ? '#888' : 'var(--primary-color)'};line-height:1.4;flex:1;">
+                        ${cardTitle}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                        ${statusBadge}
+                        ${deleteBtn}
+                    </div>
                 </div>
 
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 15px;">
-                    <p style="margin: 5px 0;"><strong>예약 날짜:</strong> ${formatDateDisplay(reservation.reservation_date)}</p>
-                    <p style="margin: 5px 0;"><strong>대상자 이름:</strong> ${participantName}</p>
-                    <p style="margin: 5px 0;"><strong>생년월일:</strong> ${birthdate}</p>
-                    <p style="margin: 5px 0;"><strong>성별:</strong> ${gender}</p>
-                    <p style="margin: 5px 0;"><strong>전화번호:</strong> ${phone}</p>
-                    <p style="margin: 5px 0;"><strong>주소:</strong> ${address}</p>
-                    <p style="margin: 5px 0;"><strong>직업:</strong> ${occupation}</p>
-                    <p style="margin: 5px 0;"><strong>관계:</strong> ${relationship}</p>
+                <!-- 2열 2행 상세 정보 -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;">
+                    <div style="background:#f8f9fa;border-radius:7px;padding:9px 12px;">
+                        <div style="font-size:0.72em;color:#aaa;margin-bottom:3px;">전화번호</div>
+                        <div style="font-size:0.88em;color:#333;">${phone}</div>
+                    </div>
+                    <div style="background:#f8f9fa;border-radius:7px;padding:9px 12px;">
+                        <div style="font-size:0.72em;color:#aaa;margin-bottom:3px;">직업</div>
+                        <div style="font-size:0.88em;color:#333;">${occupation}</div>
+                    </div>
+                    <div style="background:#f8f9fa;border-radius:7px;padding:9px 12px;">
+                        <div style="font-size:0.72em;color:#aaa;margin-bottom:3px;">주소</div>
+                        <div style="font-size:0.88em;color:#333;word-break:break-all;">${address}</div>
+                    </div>
+                    <div style="background:#f8f9fa;border-radius:7px;padding:9px 12px;">
+                        <div style="font-size:0.72em;color:#aaa;margin-bottom:3px;">관계</div>
+                        <div style="font-size:0.88em;color:#333;">${relationship}</div>
+                    </div>
                 </div>
-
-                ${!isPast ? `
-                    <button class="btn btn-danger" style="width: 100%;" onclick="showCancelConfirmation('${reservation.id}', '${participantName}', '${reservation.reservation_date}')">
-                        예약 취소하기
-                    </button>
-                ` : `
-                    <p style="text-align: center; color: var(--text-light); margin: 0;">
-                        지난 예약은 취소할 수 없습니다.
-                    </p>
-                `}
-            </div>
-        `;
+            </div>`;
     });
 
     container.innerHTML = html;
@@ -590,6 +655,7 @@ function resetSearch() {
 
     viewMode = null;
     currentOperator = null;
+    currentOperators = [];
     currentTime = null;
     currentReservations = [];
     updateExportButtonVisibility();
