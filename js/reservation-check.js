@@ -10,6 +10,7 @@ let currentReservations = [];
 let currentCancelReservationId = null;
 let allOperators = [];
 let allTimes = [];
+let allSemesters = []; // 학기 목록 캐시
 
 // -------------------------------
 // 공통 유틸
@@ -73,6 +74,8 @@ async function checkReservations() {
 
         allTimes = await getData('times', { limit: 1000 });
         allOperators = await getData('operators', { limit: 1000 });
+        allSemesters = await getData('semesters', { order: 'created_at.desc', limit: 100 });
+        if (!Array.isArray(allSemesters)) allSemesters = [];
 
         try {
             currentReservations = await getData('reservations', {
@@ -96,11 +99,37 @@ async function checkReservations() {
         }
         // RS 모드
         else if (codeInput === RS_PASSWORD) {
-            currentTime = allTimes.find(t => normalizeText(t.name) === nameInput);
+            // 활성 학기 ID 목록
+            const activeSemIds = new Set(allSemesters.filter(s => s.is_active).map(s => s.id));
 
-            if (!currentTime) {
-                alert('해당 타임을 찾을 수 없습니다. 타임 이름을 확인해주세요.');
+            // 활성 학기 타임만 대상
+            const activeTimes = activeSemIds.size > 0
+                ? allTimes.filter(t => activeSemIds.has(t.semester_id))
+                : allTimes; // 학기 정보 없으면 전체 폴백
+
+            // 동일 타임명이 활성 학기 내 여러 개인지 확인
+            const matchedTimes = activeTimes.filter(t => normalizeText(t.name) === nameInput);
+
+            if (matchedTimes.length === 0) {
+                alert('해당 타임을 찾을 수 없습니다.\n활성 학기의 타임 이름을 확인해주세요.');
                 return;
+            }
+
+            if (matchedTimes.length > 1) {
+                // 중복 타임명: 학기명과 함께 선택하도록 안내
+                const options = matchedTimes.map((t, i) => {
+                    const sem = allSemesters.find(s => s.id === t.semester_id);
+                    return `${i + 1}. ${t.name} (${sem ? sem.name : '학기미상'} / ${t.day_of_week}요일 ${t.time_range})`;
+                }).join('\n');
+                const choice = prompt(`타임명 "${nameInput}"이 여러 학기에 존재합니다.\n번호를 입력해 선택하세요:\n\n${options}`);
+                const idx = parseInt(choice) - 1;
+                if (isNaN(idx) || idx < 0 || idx >= matchedTimes.length) {
+                    alert('올바른 번호를 입력해주세요.');
+                    return;
+                }
+                currentTime = matchedTimes[idx];
+            } else {
+                currentTime = matchedTimes[0];
             }
 
             viewMode = 'rs';
@@ -179,6 +208,7 @@ function displayAdminView() {
             <table class="data-table" style="font-size: 0.8em;">
                 <thead>
                     <tr>
+                        <th>학기</th>
                         <th>타임</th>
                         <th>술자</th>
                         <th>날짜</th>
@@ -198,6 +228,7 @@ function displayAdminView() {
     currentReservations.forEach(reservation => {
         const operator = allOperators.find(op => op.id === reservation.operator_id);
         const time = allTimes.find(t => t.id === reservation.time_id);
+        const semester = time ? allSemesters.find(s => s.id === time.semester_id) : null;
         const isPast = isPastDate(reservation.reservation_date);
         const rowStyle = isPast ? 'opacity: 0.5;' : '';
 
@@ -211,6 +242,7 @@ function displayAdminView() {
 
         html += `
             <tr style="${rowStyle}">
+                <td>${semester ? semester.name : '-'}</td>
                 <td>${time ? time.name : '알수없음'}</td>
                 <td>${operator ? operator.name : '알수없음'}</td>
                 <td>${formatDateShort(reservation.reservation_date)}</td>
@@ -255,16 +287,20 @@ function displayRSView() {
         timeOperators.some(op => op.id === r.operator_id)
     );
 
+    // 해당 타임의 학기 정보
+    const timeSemester = allSemesters.find(s => s.id === currentTime.semester_id);
+    const semLabel = timeSemester ? ` (${timeSemester.name})` : '';
+
     document.getElementById('viewerInfo').innerHTML = `
         <p style="font-size: 1.2em; margin: 0;">
-            <strong>📋 ${currentTime.name} RS</strong>
+            <strong>📋 ${currentTime.name}${semLabel} RS</strong>
         </p>
         <p style="margin: 10px 0 0 0; color: var(--text-light);">
             ${currentTime.day_of_week}요일 ${currentTime.time_range} | 술자 ${timeOperators.length}명
         </p>
     `;
 
-    document.getElementById('listTitle').textContent = `${currentTime.name} 예약 목록`;
+    document.getElementById('listTitle').textContent = `${currentTime.name}${semLabel} 예약 목록`;
 
     const container = document.getElementById('reservationsList');
 
@@ -430,6 +466,7 @@ function downloadReservationsCsv() {
     }
 
     const header = [
+        '학기',
         '타임',
         '술자',
         '예약날짜',
@@ -445,8 +482,10 @@ function downloadReservationsCsv() {
     const rows = currentReservations.map(reservation => {
         const operator = allOperators.find(op => op.id === reservation.operator_id);
         const time = allTimes.find(t => t.id === reservation.time_id);
+        const semester = time ? allSemesters.find(s => s.id === time.semester_id) : null;
 
         return [
+            semester ? semester.name : '-',
             time ? time.name : '알수없음',
             operator ? operator.name : '알수없음',
             reservation.reservation_date || '-',
