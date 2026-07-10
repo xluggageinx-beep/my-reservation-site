@@ -73,15 +73,60 @@ async function showSemestersManagement() {
         showSemesterManageBody();
         await loadSemesters();
     } else {
-        showSemesterAuthSection();
+        await showSemesterAuthSection();
     }
 }
 
-function showSemesterAuthSection() {
+async function showSemesterAuthSection() {
     document.getElementById('semesterAuthSection').style.display = 'block';
     document.getElementById('semesterManageBody').style.display = 'none';
     document.getElementById('semesterPassword').value = '';
     document.getElementById('semesterAuthError').style.display = 'none';
+    await renderSemesterPreview();
+}
+
+// 비밀번호 입력 전 학기 현황 미리보기 렌더링
+async function renderSemesterPreview() {
+    const container = document.getElementById('semesterPreviewList');
+    if (!container) return;
+
+    container.innerHTML = '<p style="color:var(--text-light); font-size:0.85em;">학기 현황 로딩 중...</p>';
+
+    try {
+        const allSemesters = await getAllSemesters();
+        if (allSemesters.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-light); font-size:0.85em; padding:8px 0;">등록된 학기가 없습니다.</p>';
+            return;
+        }
+
+        // 각 학기의 타임 목록 로드
+        const timesPerSem = {};
+        for (const sem of allSemesters) {
+            try {
+                const t = await getData('times', { semester_id: sem.id, limit: 100 });
+                timesPerSem[sem.id] = Array.isArray(t) ? t : [];
+            } catch(e) { timesPerSem[sem.id] = []; }
+        }
+
+        container.innerHTML = allSemesters.map(sem => {
+            const semTimes = timesPerSem[sem.id] || [];
+            const badge = sem.is_active
+                ? `<span style="background:var(--primary-color);color:#fff;padding:2px 9px;border-radius:20px;font-size:0.78em;font-weight:600;margin-left:8px;">활성</span>`
+                : `<span style="background:#eee;color:#999;padding:2px 9px;border-radius:20px;font-size:0.78em;margin-left:8px;">비활성</span>`;
+            const timeNames = semTimes.length > 0
+                ? semTimes.map(t => `<span style="background:#f0f5ff;color:var(--primary-color);border:1px solid #c7d9ff;padding:2px 8px;border-radius:12px;font-size:0.8em;margin-right:4px;">${t.name}</span>`).join('')
+                : `<span style="color:#bbb;font-size:0.8em;">타임 없음</span>`;
+            return `
+                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 12px;border-radius:8px;background:${sem.is_active ? '#f0f5ff' : '#f8f8f8'};border:1px solid ${sem.is_active ? '#c7d9ff' : '#e8e8e8'};margin-bottom:7px;">
+                    <span style="font-weight:600;font-size:0.92em;color:#333;">${sem.name}</span>
+                    ${badge}
+                    <span style="color:#ccc;margin:0 2px;">|</span>
+                    <span style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${timeNames}</span>
+                </div>`;
+        }).join('');
+    } catch(e) {
+        container.innerHTML = '<p style="color:var(--text-light); font-size:0.85em;">학기 현황을 불러올 수 없습니다.</p>';
+    }
 }
 
 function showSemesterManageBody() {
@@ -107,7 +152,7 @@ async function authenticateSemester() {
 
 function lockSemesterManage() {
     isSemesterAuthenticated = false;
-    showSemesterAuthSection();
+    showSemesterAuthSection(); // async지만 await 불필요 (fire-and-forget)
 }
 
 // ─────────────────────────────────────────────
