@@ -1,7 +1,11 @@
 // 술자모드 페이지 로직
 
 const OPERATOR_PASSWORD = '0814';
+const SEMESTER_MANAGE_PASSWORD = '0123';
+
 let isAuthenticated = false;
+let isSemesterAuthenticated = false; // 학기 관리 별도 인증 여부
+
 let times = [];
 let operators = [];
 let reservations = [];
@@ -10,21 +14,17 @@ let currentEditingTime = null;
 let currentEditingOperator = null;
 let selectedDatesForTime = [];
 let currentEditingTimeForDates = null;
-
-// ── 현재 관리자 페이지에서 선택된 학기 ID (학기 관리 탭에서 변경 가능)
-let selectedSemesterId = null;
+let selectedSemesterId = null; // 현재 타임 관리 중인 학기 ID
 
 // ─────────────────────────────────────────────
 // 탭 활성 상태 표시
 // ─────────────────────────────────────────────
 function setActiveTab(tabName) {
     const buttons = Array.from(document.querySelectorAll('#manageSection .button-group button'));
-
     buttons.forEach(btn => {
         btn.classList.remove('btn-primary');
         btn.classList.add('btn-secondary');
     });
-
     const target = buttons.find(btn => btn.textContent.trim() === tabName);
     if (target) {
         target.classList.remove('btn-secondary');
@@ -33,16 +33,14 @@ function setActiveTab(tabName) {
 }
 
 // ─────────────────────────────────────────────
-// 패스워드 인증
+// 관리자 패스워드 인증 (0814)
 // ─────────────────────────────────────────────
 async function authenticate() {
     const password = document.getElementById('password').value;
-
     if (password === OPERATOR_PASSWORD) {
         isAuthenticated = true;
         document.getElementById('authSection').style.display = 'none';
         document.getElementById('manageSection').style.display = 'block';
-        // 인증 후 학기 관리 탭을 먼저 표시
         await showSemestersManagement();
     } else {
         alert('패스워드가 올바르지 않습니다.');
@@ -54,7 +52,7 @@ async function authenticate() {
 // 탭 전환 공통 헬퍼
 // ─────────────────────────────────────────────
 function hideAllManagementSections() {
-    ['semestersManagement', 'timesManagement', 'operatorsManagement', 'reservationsManagement']
+    ['semestersManagement', 'operatorsManagement', 'reservationsManagement']
         .forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
@@ -62,15 +60,59 @@ function hideAllManagementSections() {
 }
 
 // ─────────────────────────────────────────────
-// 학기 관리 탭
+// 학기 관리 탭 — 비밀번호 잠금 (0123)
 // ─────────────────────────────────────────────
 async function showSemestersManagement() {
     setActiveTab('학기 관리');
     hideAllManagementSections();
     document.getElementById('semestersManagement').style.display = 'block';
-    await loadSemesters();
+
+    // 인증 상태 초기화해서 항상 비밀번호부터 보여줌 (탭 전환 시)
+    // 이미 인증된 상태면 바로 본문 표시
+    if (isSemesterAuthenticated) {
+        showSemesterManageBody();
+        await loadSemesters();
+    } else {
+        showSemesterAuthSection();
+    }
 }
 
+function showSemesterAuthSection() {
+    document.getElementById('semesterAuthSection').style.display = 'block';
+    document.getElementById('semesterManageBody').style.display = 'none';
+    document.getElementById('semesterPassword').value = '';
+    document.getElementById('semesterAuthError').style.display = 'none';
+}
+
+function showSemesterManageBody() {
+    document.getElementById('semesterAuthSection').style.display = 'none';
+    document.getElementById('semesterManageBody').style.display = 'block';
+}
+
+async function authenticateSemester() {
+    const pw = document.getElementById('semesterPassword').value;
+    const errorEl = document.getElementById('semesterAuthError');
+
+    if (pw === SEMESTER_MANAGE_PASSWORD) {
+        isSemesterAuthenticated = true;
+        errorEl.style.display = 'none';
+        showSemesterManageBody();
+        await loadSemesters();
+    } else {
+        errorEl.textContent = '비밀번호가 올바르지 않습니다.';
+        errorEl.style.display = 'block';
+        document.getElementById('semesterPassword').value = '';
+    }
+}
+
+function lockSemesterManage() {
+    isSemesterAuthenticated = false;
+    showSemesterAuthSection();
+}
+
+// ─────────────────────────────────────────────
+// 학기 데이터 로드 & 표시
+// ─────────────────────────────────────────────
 async function loadSemesters() {
     const container = document.getElementById('semestersList');
     if (!container) return;
@@ -79,7 +121,7 @@ async function loadSemesters() {
 
     try {
         semesters = await getAllSemesters();
-        displaySemesters();
+        await displaySemesters();
     } catch (error) {
         console.error('학기 로드 오류:', error);
         container.innerHTML = `
@@ -90,7 +132,7 @@ async function loadSemesters() {
     }
 }
 
-function displaySemesters() {
+async function displaySemesters() {
     const container = document.getElementById('semestersList');
     if (!container) return;
 
@@ -99,49 +141,84 @@ function displaySemesters() {
             <p style="text-align:center; padding:40px; color:var(--text-light);">
                 등록된 학기가 없습니다. 학기를 추가해주세요.
             </p>`;
+        updateActiveSemesterBadge();
         return;
     }
 
-    let html = `
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>학기 이름</th>
-                    <th>상태</th>
-                    <th>관리</th>
-                </tr>
-            </thead>
-            <tbody>`;
+    // 각 학기별로 타임 목록도 함께 로드
+    const timesPerSemester = {};
+    for (const sem of semesters) {
+        try {
+            const semTimes = await getData('times', { semester_id: sem.id, limit: 1000 });
+            timesPerSemester[sem.id] = Array.isArray(semTimes) ? semTimes : [];
+        } catch(e) {
+            timesPerSemester[sem.id] = [];
+        }
+    }
+
+    container.innerHTML = '';
 
     semesters.forEach(sem => {
         const isActive = sem.is_active;
+        const semTimes = timesPerSemester[sem.id] || [];
+
+        const card = document.createElement('div');
+        card.className = 'time-card';
+        card.style.marginBottom = '24px';
+
         const statusBadge = isActive
-            ? `<span style="color:#fff; background:var(--primary-color); padding:3px 10px; border-radius:20px; font-size:0.85em;">✅ 활성</span>`
-            : `<span style="color:#999; background:#eee; padding:3px 10px; border-radius:20px; font-size:0.85em;">비활성</span>`;
+            ? `<span style="color:#fff; background:var(--primary-color); padding:3px 12px; border-radius:20px; font-size:0.83em; font-weight:600;">✅ 활성</span>`
+            : `<span style="color:#999; background:#eee; padding:3px 12px; border-radius:20px; font-size:0.83em;">비활성</span>`;
 
         const activateBtn = isActive
-            ? `<button onclick="handleDeactivateSemester('${sem.id}')" style="background:var(--text-light);color:#fff;">비활성화</button>`
-            : `<button onclick="handleActivateSemester('${sem.id}')" style="background:var(--primary-color);color:#fff;">활성화</button>`;
+            ? `<button onclick="handleDeactivateSemester('${sem.id}')" class="btn btn-secondary" style="font-size:0.85em; padding:6px 14px;">비활성화</button>`
+            : `<button onclick="handleActivateSemester('${sem.id}')" class="btn btn-primary" style="font-size:0.85em; padding:6px 14px;">활성화</button>`;
 
-        html += `
-            <tr>
-                <td style="font-weight:600;">${sem.name}</td>
-                <td>${statusBadge}</td>
-                <td>
+        // 타임 목록 렌더링
+        let timesHtml = '';
+        if (semTimes.length === 0) {
+            timesHtml = `<p style="color:var(--text-light); font-size:0.88em; margin:8px 0 0;">등록된 타임 없음</p>`;
+        } else {
+            timesHtml = `
+                <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">
+                    ${semTimes.map(t => `
+                        <div style="background:#f0f5ff; border:1px solid #c7d9ff; border-radius:8px; padding:6px 12px; font-size:0.85em;">
+                            <strong>${t.name}</strong>
+                            <span style="color:#666; margin-left:6px;">${t.day_of_week}요일 ${t.time_range}</span>
+                            <button onclick="editTime('${t.id}','${sem.id}')"
+                                style="margin-left:8px; background:none; border:none; color:var(--primary-color); cursor:pointer; font-size:0.88em; padding:0;">수정</button>
+                            <button onclick="deleteTime('${t.id}')"
+                                style="margin-left:4px; background:none; border:none; color:var(--danger); cursor:pointer; font-size:0.88em; padding:0;">삭제</button>
+                        </div>
+                    `).join('')}
+                </div>`;
+        }
+
+        card.innerHTML = `
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <h3 style="margin:0; font-size:1.05em;">${sem.name}</h3>
+                    ${statusBadge}
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     ${activateBtn}
-                    <button onclick="handleDeleteSemester('${sem.id}')" style="background:var(--danger);color:#fff;">삭제</button>
-                </td>
-            </tr>`;
+                    <button onclick="showAddTimeModalForSemester('${sem.id}')"
+                        class="btn btn-secondary" style="font-size:0.85em; padding:6px 14px;">
+                        + 타임 추가
+                    </button>
+                    <button onclick="handleDeleteSemester('${sem.id}')"
+                        class="btn btn-danger" style="font-size:0.85em; padding:6px 14px;">
+                        학기 삭제
+                    </button>
+                </div>
+            </div>
+            <div id="timesOf_${sem.id}">
+                ${timesHtml}
+            </div>`;
+
+        container.appendChild(card);
     });
 
-    html += `</tbody></table>`;
-    container.innerHTML = html;
-
-    // 활성 학기를 selectedSemesterId에 반영
-    const activeSem = semesters.find(s => s.is_active);
-    if (activeSem) selectedSemesterId = activeSem.id;
-
-    // 활성 학기 배지 갱신
     updateActiveSemesterBadge();
 }
 
@@ -162,7 +239,6 @@ async function handleActivateSemester(semesterId) {
     const sem = semesters.find(s => s.id === semesterId);
     if (!sem) return;
     if (!confirm(`"${sem.name}"을 활성 학기로 설정하시겠습니까?\n기존 활성 학기는 자동으로 비활성화됩니다.`)) return;
-
     try {
         await activateSemester(semesterId);
         selectedSemesterId = semesterId;
@@ -178,7 +254,6 @@ async function handleDeactivateSemester(semesterId) {
     const sem = semesters.find(s => s.id === semesterId);
     if (!sem) return;
     if (!confirm(`"${sem.name}"을 비활성화하시겠습니까?`)) return;
-
     try {
         await deactivateSemester(semesterId);
         if (selectedSemesterId === semesterId) selectedSemesterId = null;
@@ -194,7 +269,6 @@ async function handleDeleteSemester(semesterId) {
     const sem = semesters.find(s => s.id === semesterId);
     if (!sem) return;
     if (!confirm(`"${sem.name}"을 삭제하시겠습니까?\n이 학기에 속한 타임이 있으면 삭제할 수 없습니다.`)) return;
-
     try {
         await deleteSemester(semesterId);
         if (selectedSemesterId === semesterId) selectedSemesterId = null;
@@ -221,13 +295,11 @@ async function saveSemester() {
         alert('학기 이름을 입력해주세요. (예: 2025-2학기)');
         return;
     }
-
     const duplicate = semesters.find(s => s.name === name);
     if (duplicate) {
         alert('이미 동일한 이름의 학기가 존재합니다.');
         return;
     }
-
     try {
         await createSemester(name);
         alert(`"${name}" 학기가 추가되었습니다.`);
@@ -240,108 +312,22 @@ async function saveSemester() {
 }
 
 // ─────────────────────────────────────────────
-// 타임 관리 탭
+// 타임 관리 (학기 카드 내 인라인)
 // ─────────────────────────────────────────────
-async function showTimesManagement() {
-    setActiveTab('타임 수정');
-    hideAllManagementSections();
-    document.getElementById('timesManagement').style.display = 'block';
-    await loadTimes();
-}
 
-async function loadTimes() {
-    const container = document.getElementById('timesList');
-    if (!container) return;
+// 학기 카드에서 타임 추가 버튼 클릭
+function showAddTimeModalForSemester(semId) {
+    selectedSemesterId = semId;
 
-    showLoading('timesList');
+    // 해당 학기의 타임 수 확인
+    const semTimesEl = document.getElementById('timesOf_' + semId);
+    const currentCount = semTimesEl
+        ? semTimesEl.querySelectorAll('[id^=""]').length
+        : 0;
 
-    try {
-        // 활성 학기의 times만 로드
-        const activeSem = semesters.length > 0 ? semesters.find(s => s.is_active) : await getActiveSemester();
-        if (!activeSem) {
-            container.innerHTML = `
-                <div class="warning-box" style="text-align:center; padding:30px;">
-                    <p><strong>활성 학기가 없습니다.</strong><br>먼저 <b>학기 관리</b> 탭에서 학기를 추가하고 활성화해주세요.</p>
-                </div>`;
-            times = [];
-            const countElement = document.getElementById('currentTimeCount');
-            if (countElement) countElement.textContent = '0';
-            return;
-        }
-
-        selectedSemesterId = activeSem.id;
-        const response = await getData('times', { semester_id: activeSem.id, limit: 1000 });
-        times = Array.isArray(response) ? response : [];
-
-        const countElement = document.getElementById('currentTimeCount');
-        if (countElement) countElement.textContent = times.length;
-
-        const addTimeBtn = document.getElementById('addTimeBtn');
-        if (addTimeBtn) {
-            if (times.length >= 6) {
-                addTimeBtn.disabled = true;
-                addTimeBtn.textContent = '타임 추가 (최대 6개)';
-            } else {
-                addTimeBtn.disabled = false;
-                addTimeBtn.textContent = '타임 추가';
-            }
-        }
-
-        // 타임 수정 헤더에 활성 학기 표시
-        const timesHeader = document.getElementById('timesManagementHeader');
-        if (timesHeader) timesHeader.textContent = `타임 수정 — ${activeSem.name}`;
-
-        displayTimes();
-    } catch (error) {
-        console.error('타임 로드 오류:', error);
-        container.innerHTML = `
-            <div class="warning-box" style="text-align:center; padding:30px;">
-                <p><strong>타임 데이터를 불러오는 중 오류가 발생했습니다.</strong></p>
-                <button class="btn btn-primary" onclick="loadTimes()" style="margin-top:15px;">다시 시도</button>
-            </div>`;
-    }
-}
-
-function displayTimes() {
-    const container = document.getElementById('timesList');
-
-    if (times.length === 0) {
-        container.innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-light);">등록된 타임이 없습니다.</p>';
-        return;
-    }
-
-    container.innerHTML = '';
-
-    times.forEach(time => {
-        const timeCard = document.createElement('div');
-        timeCard.className = 'time-card';
-
-        const datesCount = Array.isArray(time.selected_dates) ? time.selected_dates.length : 0;
-        const datesInfo = datesCount > 0 ? `${datesCount}개 날짜 선택됨` : '날짜 미선택';
-
-        timeCard.innerHTML = `
-            <h3>${time.name}</h3>
-            <div class="time-info">
-                <p><strong>요일:</strong> ${time.day_of_week}요일</p>
-                <p><strong>시간:</strong> ${time.time_range}</p>
-                <p><strong>주차 정보:</strong> ${datesInfo}</p>
-            </div>
-            <div style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
-                <button class="btn btn-secondary" style="padding:10px 20px; font-size:0.9em;" onclick="editTime('${time.id}')">수정</button>
-                <button class="btn btn-danger" style="padding:10px 20px; font-size:0.9em;" onclick="deleteTime('${time.id}')">삭제</button>
-            </div>`;
-
-        container.appendChild(timeCard);
-    });
-}
-
-function showAddTimeModal() {
-    if (!selectedSemesterId) {
-        alert('활성 학기가 없습니다. 학기 관리 탭에서 학기를 활성화해주세요.');
-        return;
-    }
-
-    if (times.length >= 6) {
+    // times 배열에서 해당 학기 타임 수 확인
+    const semTimes = times.filter(t => t.semester_id === semId);
+    if (semTimes.length >= 6) {
         alert('최대 6개의 타임만 추가할 수 있습니다.');
         return;
     }
@@ -359,8 +345,26 @@ function showAddTimeModal() {
     showModal('timeModal');
 }
 
-function editTime(timeId) {
+// 타임 수정 (학기 카드 내 수정 버튼)
+async function editTime(timeId, semId) {
+    if (semId) selectedSemesterId = semId;
+
+    // times 캐시에 없으면 로드
+    if (!times.find(t => t.id === timeId)) {
+        try {
+            const allT = await getData('times', { limit: 1000 });
+            times = Array.isArray(allT) ? allT : [];
+        } catch(e) {}
+    }
+
     currentEditingTime = times.find(t => t.id === timeId);
+    if (!currentEditingTime) {
+        // 직접 조회
+        try {
+            const rows = await getData('times', { id: timeId, limit: 1 });
+            currentEditingTime = rows[0] || null;
+        } catch(e) {}
+    }
     if (!currentEditingTime) return;
 
     selectedDatesForTime = Array.isArray(currentEditingTime.selected_dates)
@@ -392,7 +396,7 @@ async function saveTime() {
             day_of_week: dayOfWeek,
             time_range: timeRange,
             selected_dates: selectedDatesForTime,
-            semester_id: selectedSemesterId   // ← 학기 연결
+            semester_id: selectedSemesterId
         };
 
         if (currentEditingTime) {
@@ -400,14 +404,16 @@ async function saveTime() {
             await updateData('times', currentEditingTime.id, timeData);
             alert('타임이 수정되었습니다.');
         } else {
-            if (times.length >= 6) { alert('최대 6개의 타임만 추가할 수 있습니다.'); return; }
             timeData.id = generateUUID();
             await createData('times', timeData);
             alert('타임이 추가되었습니다.');
         }
 
         closeTimeModal();
-        await loadTimes();
+        // 전체 times 캐시 갱신 후 학기 목록 재렌더링
+        const allT = await getData('times', { limit: 1000 });
+        times = Array.isArray(allT) ? allT : [];
+        await loadSemesters();
     } catch (error) {
         console.error('타임 저장 오류:', error);
         alert('타임 저장 중 오류가 발생했습니다.');
@@ -429,7 +435,10 @@ async function deleteTime(timeId) {
 
         await deleteData('times', timeId);
         alert('타임이 삭제되었습니다.');
-        await loadTimes();
+
+        const allT = await getData('times', { limit: 1000 });
+        times = Array.isArray(allT) ? allT : [];
+        await loadSemesters();
     } catch (error) {
         console.error('타임 삭제 오류:', error);
         alert('타임 삭제 중 오류가 발생했습니다.');
@@ -453,7 +462,6 @@ function showDatePicker() {
 function renderCalendar(dayOfWeek) {
     const container = document.getElementById('calendarContainer');
     const currentYear = new Date().getFullYear();
-
     const dayMap = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5 };
     const targetDay = dayMap[dayOfWeek];
 
@@ -468,20 +476,14 @@ function renderCalendar(dayOfWeek) {
         datesGrid.className = 'date-grid';
 
         const daysInMonth = new Date(currentYear, month, 0).getDate();
-
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(currentYear, month - 1, day);
             const dateString = formatDate(date);
-
             if (date.getDay() === targetDay) {
                 const dateButton = document.createElement('button');
                 dateButton.className = 'date-button';
                 dateButton.textContent = formatDateShort(dateString);
-
-                if (selectedDatesForTime.includes(dateString)) {
-                    dateButton.classList.add('selected');
-                }
-
+                if (selectedDatesForTime.includes(dateString)) dateButton.classList.add('selected');
                 dateButton.onclick = () => toggleDateSelection(dateString, dateButton);
                 datesGrid.appendChild(dateButton);
             }
@@ -498,19 +500,14 @@ function renderCalendar(dayOfWeek) {
 
 function toggleDateSelection(dateString, button) {
     const index = selectedDatesForTime.indexOf(dateString);
-
     if (index > -1) {
         selectedDatesForTime.splice(index, 1);
         button.classList.remove('selected');
     } else {
-        if (selectedDatesForTime.length >= 13) {
-            alert('최대 13개의 날짜만 선택할 수 있습니다.');
-            return;
-        }
+        if (selectedDatesForTime.length >= 13) { alert('최대 13개의 날짜만 선택할 수 있습니다.'); return; }
         selectedDatesForTime.push(dateString);
         button.classList.add('selected');
     }
-
     updateSelectedDateCount();
 }
 
@@ -522,7 +519,6 @@ function updateSelectedDateCount() {
 function updateSelectedDatesDisplay() {
     const display = document.getElementById('selectedDatesDisplay');
     if (!display) return;
-
     if (selectedDatesForTime.length === 0) {
         display.textContent = '선택된 날짜가 없습니다.';
         display.style.color = 'var(--text-light)';
@@ -533,10 +529,7 @@ function updateSelectedDatesDisplay() {
 }
 
 function confirmDates() {
-    if (selectedDatesForTime.length === 0) {
-        alert('최소 1개 이상의 날짜를 선택해주세요.');
-        return;
-    }
+    if (selectedDatesForTime.length === 0) { alert('최소 1개 이상의 날짜를 선택해주세요.'); return; }
     selectedDatesForTime.sort();
     updateSelectedDatesDisplay();
     closeDatePicker();
@@ -558,9 +551,7 @@ async function showOperatorsManagement() {
 
 async function loadOperators() {
     showLoading('operatorsList');
-
     try {
-        // 활성 학기 확인
         const activeSem = semesters.length > 0 ? semesters.find(s => s.is_active) : await getActiveSemester();
         if (!activeSem) {
             document.getElementById('operatorsList').innerHTML = `
@@ -574,15 +565,12 @@ async function loadOperators() {
 
         selectedSemesterId = activeSem.id;
 
-        // 활성 학기의 times + operators만 로드
         const timesResponse = await getData('times', { semester_id: activeSem.id, limit: 1000 });
         times = Array.isArray(timesResponse) ? timesResponse : [];
 
-        // operators도 semester_id로 필터링
         const operatorsResponse = await getData('operators', { semester_id: activeSem.id, limit: 1000 });
         operators = Array.isArray(operatorsResponse) ? operatorsResponse : [];
 
-        // 술자 관리 헤더에 활성 학기 표시
         const opsHeader = document.getElementById('operatorsManagementHeader');
         if (opsHeader) opsHeader.textContent = `술자 리스트 수정 — ${activeSem.name}`;
 
@@ -595,7 +583,6 @@ async function loadOperators() {
 
 function displayOperators() {
     const container = document.getElementById('operatorsList');
-
     if (operators.length === 0) {
         container.innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-light);">등록된 술자가 없습니다.</p>';
         return;
@@ -604,20 +591,13 @@ function displayOperators() {
     let tableHTML = `
         <table class="data-table">
             <thead>
-                <tr>
-                    <th>이름</th>
-                    <th>학번</th>
-                    <th>전화번호</th>
-                    <th>타임</th>
-                    <th>관리</th>
-                </tr>
+                <tr><th>이름</th><th>학번</th><th>전화번호</th><th>타임</th><th>관리</th></tr>
             </thead>
             <tbody>`;
 
     operators.forEach(operator => {
         const time = times.find(t => t.id === operator.time_id);
         const timeName = time ? time.name : '미지정';
-
         tableHTML += `
             <tr>
                 <td>${operator.name || '-'}</td>
@@ -640,14 +620,12 @@ function showAddOperatorModal() {
         alert('활성 학기가 없습니다. 학기 관리 탭에서 학기를 활성화해주세요.');
         return;
     }
-
     if (times.length === 0) {
         alert('먼저 타임을 추가해주세요.');
         return;
     }
 
     currentEditingOperator = null;
-
     document.getElementById('operatorModalTitle').textContent = '술자 추가';
     document.getElementById('operatorName').value = '';
     document.getElementById('operatorStudentId').value = '';
@@ -655,18 +633,12 @@ function showAddOperatorModal() {
 
     const timeSelect = document.getElementById('operatorTimeId');
     timeSelect.innerHTML = '';
-
     times.forEach(time => {
         const timeOperatorsCount = operators.filter(op => op.time_id === time.id).length;
         const option = document.createElement('option');
         option.value = time.id;
         option.textContent = `${time.name} (${time.day_of_week}요일 ${time.time_range}) - ${timeOperatorsCount}/12명`;
-
-        if (timeOperatorsCount >= 12) {
-            option.disabled = true;
-            option.textContent += ' (정원 초과)';
-        }
-
+        if (timeOperatorsCount >= 12) { option.disabled = true; option.textContent += ' (정원 초과)'; }
         timeSelect.appendChild(option);
     });
 
@@ -684,16 +656,11 @@ function editOperator(operatorId) {
 
     const timeSelect = document.getElementById('operatorTimeId');
     timeSelect.innerHTML = '';
-
     times.forEach(time => {
         const option = document.createElement('option');
         option.value = time.id;
         option.textContent = `${time.name} (${time.day_of_week}요일 ${time.time_range})`;
-
-        if (time.id === currentEditingOperator.time_id) {
-            option.selected = true;
-        }
-
+        if (time.id === currentEditingOperator.time_id) option.selected = true;
         timeSelect.appendChild(option);
     });
 
@@ -712,26 +679,21 @@ async function saveOperator() {
     if (!timeId) { alert('타임을 선택해주세요.'); return; }
 
     if (!currentEditingOperator) {
-        const timeOperatorsCount = operators.filter(op => op.time_id === timeId).length;
-        if (timeOperatorsCount >= 12) {
-            alert('한 타임당 최대 12명의 술자만 추가할 수 있습니다.');
-            return;
+        if (operators.filter(op => op.time_id === timeId).length >= 12) {
+            alert('한 타임당 최대 12명의 술자만 추가할 수 있습니다.'); return;
         }
     } else if (currentEditingOperator.time_id !== timeId) {
-        const timeOperatorsCount = operators.filter(op => op.time_id === timeId).length;
-        if (timeOperatorsCount >= 12) {
-            alert('해당 타임은 이미 12명의 술자가 등록되어 있습니다.');
-            return;
+        if (operators.filter(op => op.time_id === timeId).length >= 12) {
+            alert('해당 타임은 이미 12명의 술자가 등록되어 있습니다.'); return;
         }
     }
 
     try {
         const operatorData = {
-            name,
-            student_id: studentId,
+            name, student_id: studentId,
             phone: formatPhone(phone),
             time_id: timeId,
-            semester_id: selectedSemesterId   // ← 학기 연결
+            semester_id: selectedSemesterId
         };
 
         if (currentEditingOperator) {
@@ -754,16 +716,13 @@ async function saveOperator() {
 
 async function deleteOperator(operatorId) {
     try {
-        const reservationsResponse = await getData('reservations', { limit: 5000 });
-        const allReservations = Array.isArray(reservationsResponse) ? reservationsResponse : [];
+        const allReservations = Array.isArray(await getData('reservations', { limit: 5000 }))
+            ? await getData('reservations', { limit: 5000 }) : [];
         const operatorReservations = allReservations.filter(r => r.operator_id === operatorId);
 
         if (operatorReservations.length > 0) {
             if (!confirm(`이 술자에게 ${operatorReservations.length}개의 예약이 있습니다. 정말 삭제하시겠습니까? (예약도 함께 삭제됩니다)`)) return;
-
-            for (const reservation of operatorReservations) {
-                await deleteData('reservations', reservation.id);
-            }
+            for (const r of operatorReservations) await deleteData('reservations', r.id);
         } else {
             if (!confirm('정말 이 술자를 삭제하시겠습니까?')) return;
         }
@@ -808,16 +767,11 @@ async function loadReservationsSummary() {
         if (!summaryContainer) return;
 
         if (reservations.length === 0) {
-            summaryContainer.innerHTML = `
-                <div class="notice-box" style="text-align:center; padding:40px;">
-                    <p>현재 예약이 없습니다.</p>
-                </div>`;
+            summaryContainer.innerHTML = `<div class="notice-box" style="text-align:center; padding:40px;"><p>현재 예약이 없습니다.</p></div>`;
             return;
         }
 
-        const timesResponse = await getData('times', { limit: 1000 });
-        const allTimes = Array.isArray(timesResponse) ? timesResponse : [];
-
+        const allTimes = Array.isArray(await getData('times', { limit: 1000 })) ? await getData('times', { limit: 1000 }) : [];
         const timeStats = {};
         reservations.forEach(r => {
             const time = allTimes.find(t => t.id === r.time_id);
@@ -826,29 +780,20 @@ async function loadReservationsSummary() {
             timeStats[timeName]++;
         });
 
-        let html = '<div class="time-card">';
-        html += '<h4 style="color:var(--primary-color);">타임별 예약 현황</h4>';
+        let html = '<div class="time-card"><h4 style="color:var(--primary-color);">타임별 예약 현황</h4>';
         html += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:15px; margin-top:15px;">';
-
         for (const [timeName, count] of Object.entries(timeStats)) {
-            html += `
-                <div style="padding:15px; background-color:#f8f9fa; border-radius:5px; text-align:center;">
-                    <div style="font-weight:600; margin-bottom:5px;">${timeName}</div>
-                    <div style="font-size:1.5em; color:var(--primary-color);">${count}건</div>
-                </div>`;
+            html += `<div style="padding:15px; background:#f8f9fa; border-radius:5px; text-align:center;">
+                <div style="font-weight:600; margin-bottom:5px;">${timeName}</div>
+                <div style="font-size:1.5em; color:var(--primary-color);">${count}건</div>
+            </div>`;
         }
-
         html += '</div></div>';
         summaryContainer.innerHTML = html;
     } catch (error) {
         console.error('예약 요약 로드 오류:', error);
-        const summaryContainer = document.getElementById('reservationsSummary');
-        if (summaryContainer) {
-            summaryContainer.innerHTML = `
-                <div class="warning-box" style="text-align:center;">
-                    <p>예약 정보를 불러오는 중 오류가 발생했습니다.</p>
-                </div>`;
-        }
+        const el = document.getElementById('reservationsSummary');
+        if (el) el.innerHTML = `<div class="warning-box" style="text-align:center;"><p>예약 정보를 불러오는 중 오류가 발생했습니다.</p></div>`;
     }
 }
 
@@ -859,17 +804,11 @@ async function deleteAllReservations() {
     try {
         const response = await getData('reservations', { limit: 5000 });
         const reservations = Array.isArray(response) ? response : [];
-
         if (reservations.length === 0) { alert('삭제할 예약이 없습니다.'); return; }
 
         let deletedCount = 0;
-        for (const reservation of reservations) {
-            try {
-                await deleteData('reservations', reservation.id);
-                deletedCount++;
-            } catch (error) {
-                console.error(`예약 ${reservation.id} 삭제 오류:`, error);
-            }
+        for (const r of reservations) {
+            try { await deleteData('reservations', r.id); deletedCount++; } catch(e) {}
         }
 
         alert(`총 ${deletedCount}개의 예약이 삭제되었습니다.`);

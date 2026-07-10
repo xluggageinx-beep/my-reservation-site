@@ -16,7 +16,7 @@
         </header>
 
         <main class="main-content">
-            <!-- 패스워드 인증 섹션 -->
+            <!-- 패스워드 인증 섹션 (관리자 0814) -->
             <div id="authSection">
                 <h3 style="color: var(--primary-color); text-align: center; margin-bottom: 30px;">패스워드 입력</h3>
                 <div class="form-group">
@@ -37,61 +37,68 @@
 
                 <div class="button-group" style="margin-bottom: 40px;">
                     <button class="btn btn-primary" onclick="showSemestersManagement()">학기 관리</button>
-                    <button class="btn btn-secondary" onclick="showTimesManagement()">타임 수정</button>
                     <button class="btn btn-secondary" onclick="showOperatorsManagement()">술자 리스트 수정</button>
                     <button class="btn btn-secondary" onclick="showReservationsManagement()">예약 관리</button>
                     <button class="btn btn-secondary" onclick="navigateToReservationCheck()">예약 정보 확인</button>
                 </div>
 
-                <!-- 학기 관리 -->
+                <!-- ── 학기 관리 ── -->
                 <div id="semestersManagement" style="display: none;">
-                    <h3 style="color: var(--primary-color); margin-bottom: 20px;">학기 관리</h3>
 
-                    <div class="form-group">
-                        <button class="btn btn-primary" onclick="showAddSemesterModal()">학기 추가</button>
-                        <span style="margin-left:15px; color:var(--text-light); font-size:0.9em;">학기를 추가하고 활성화하면 해당 학기의 타임/술자만 예약 페이지에 표시됩니다.</span>
+                    <!-- 학기 관리 비밀번호 잠금 화면 -->
+                    <div id="semesterAuthSection">
+                        <h3 style="color: var(--primary-color); margin-bottom: 10px;">학기 관리</h3>
+                        <p style="color: var(--text-light); font-size:0.9em; margin-bottom:20px;">
+                            학기 활성화·비활성화, 타임 추가·수정·삭제는 별도 비밀번호가 필요합니다.
+                        </p>
+                        <div class="form-group">
+                            <label for="semesterPassword">학기 관리 비밀번호</label>
+                            <input type="password" id="semesterPassword" placeholder="비밀번호를 입력하세요"
+                                   onkeypress="if(event.key==='Enter') authenticateSemester()">
+                        </div>
+                        <div class="button-group">
+                            <button class="btn btn-primary" onclick="authenticateSemester()">확인</button>
+                        </div>
+                        <div id="semesterAuthError" style="color:var(--danger); margin-top:10px; display:none;"></div>
                     </div>
 
-                    <div id="semestersList"></div>
-                </div>
+                    <!-- 학기 관리 본문 (비밀번호 인증 후) -->
+                    <div id="semesterManageBody" style="display:none;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                            <h3 style="color: var(--primary-color); margin:0;">학기 관리</h3>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <button class="btn btn-primary" onclick="showAddSemesterModal()">학기 추가</button>
+                                <button class="btn btn-secondary" style="font-size:0.85em;" onclick="lockSemesterManage()">🔒 잠금</button>
+                            </div>
+                        </div>
+                        <p style="color:var(--text-light); font-size:0.88em; margin-bottom:20px;">
+                            학기를 활성화하면 해당 학기의 타임/술자만 예약 페이지에 표시됩니다.
+                        </p>
 
-                <!-- 타임 수정 -->
-                <div id="timesManagement" style="display: none;">
-                    <h3 id="timesManagementHeader" style="color: var(--primary-color); margin-bottom: 20px;">타임 수정</h3>
-                    
-                    <div class="form-group">
-                        <button class="btn btn-primary" onclick="showAddTimeModal()" id="addTimeBtn">타임 추가</button>
-                        <span style="margin-left: 15px; color: var(--text-light);">현재 타임: <span id="currentTimeCount">0</span>개 (최소 2개, 최대 6개)</span>
+                        <div id="semestersList"></div>
                     </div>
-
-                    <div id="timesList"></div>
                 </div>
 
                 <!-- 술자 리스트 수정 -->
                 <div id="operatorsManagement" style="display: none;">
                     <h3 id="operatorsManagementHeader" style="color: var(--primary-color); margin-bottom: 20px;">술자 리스트 수정</h3>
-                    
                     <div class="form-group">
                         <button class="btn btn-primary" onclick="showAddOperatorModal()">술자 추가</button>
                     </div>
-
                     <div id="operatorsList"></div>
                 </div>
 
                 <!-- 예약 관리 -->
                 <div id="reservationsManagement" style="display: none;">
                     <h3 style="color: var(--primary-color); margin-bottom: 20px;">예약 관리</h3>
-                    
                     <div class="warning-box" style="margin-bottom: 20px;">
                         <h4>⚠️ 주의</h4>
                         <p style="margin: 0;">전체 예약 목록을 삭제하면 <strong style="color: var(--danger);">모든 예약이 영구적으로 삭제</strong>됩니다. 이 작업은 되돌릴 수 없습니다.</p>
                     </div>
-                    
                     <div class="form-group">
                         <button class="btn btn-danger" onclick="deleteAllReservations()">전체 예약 목록 삭제</button>
                         <span style="margin-left: 15px; color: var(--text-light);">현재 예약: <span id="currentReservationCount">0</span>개</span>
                     </div>
-
                     <div id="reservationsSummary"></div>
                 </div>
             </div>
