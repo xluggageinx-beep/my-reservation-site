@@ -192,6 +192,7 @@ async function confirmReservation() {
     const participantRelationship = sessionStorage.getItem('participantRelationship') || '미입력';
     const timeId = sessionStorage.getItem('selectedTimeId');
     const operatorId = sessionStorage.getItem('selectedOperatorId');
+    const semesterId = sessionStorage.getItem('activeSemesterId');
 
     if (!participantName || !participantPhone || !timeId || !operatorId) {
         alert('예약 정보가 누락되었습니다. 처음부터 다시 진행해주세요.');
@@ -241,6 +242,7 @@ async function confirmReservation() {
             participant_relationship: participantRelationship,
             operator_id: operatorId,
             time_id: timeId,
+            semester_id: semesterId || null,
             reservation_date: selectedDate,
             consent_agreed: true
         };

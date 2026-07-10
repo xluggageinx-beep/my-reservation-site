@@ -40,6 +40,9 @@ async function loadTimesAndOperators() {
             return;
         }
         console.log('활성 학기:', activeSem.name);
+        // 활성 학기 ID를 예약 생성 시 사용하기 위해 저장
+        sessionStorage.setItem('activeSemesterId', activeSem.id);
+        sessionStorage.setItem('activeSemesterName', activeSem.name);
 
         // ── 활성 학기의 타임/술자만 로드 ────────────
         const timesResponse = await getData('times', {

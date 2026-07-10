@@ -440,7 +440,8 @@ async function saveTime() {
     const timeRange = document.getElementById('timeRange').value.trim();
 
     if (!name) { alert('타임 이름을 입력해주세요.'); return; }
-    if (!timeRange) { alert('시간 범위를 입력해주세요.'); return; }
+    if (!dayOfWeek) { alert('요일을 선택해주세요.'); return; }
+    if (!timeRange) { alert('시간 범위를 입력해주세요. (예: 09:00-12:00)'); return; }
 
     try {
         const timeData = {
