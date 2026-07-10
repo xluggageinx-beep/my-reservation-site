@@ -552,27 +552,17 @@ async function showOperatorsManagement() {
 async function loadOperators() {
     showLoading('operatorsList');
     try {
-        const activeSem = semesters.length > 0 ? semesters.find(s => s.is_active) : await getActiveSemester();
-        if (!activeSem) {
-            document.getElementById('operatorsList').innerHTML = `
-                <div class="warning-box" style="text-align:center; padding:30px;">
-                    <p><strong>활성 학기가 없습니다.</strong><br>학기 관리 탭에서 학기를 활성화해주세요.</p>
-                </div>`;
-            operators = [];
-            times = [];
-            return;
+        // 전체 학기 로드 (최신순)
+        if (semesters.length === 0) {
+            semesters = await getAllSemesters();
         }
 
-        selectedSemesterId = activeSem.id;
-
-        const timesResponse = await getData('times', { semester_id: activeSem.id, limit: 1000 });
+        // 전체 타임/술자 로드
+        const timesResponse = await getData('times', { limit: 1000 });
         times = Array.isArray(timesResponse) ? timesResponse : [];
 
-        const operatorsResponse = await getData('operators', { semester_id: activeSem.id, limit: 1000 });
+        const operatorsResponse = await getData('operators', { limit: 1000 });
         operators = Array.isArray(operatorsResponse) ? operatorsResponse : [];
-
-        const opsHeader = document.getElementById('operatorsManagementHeader');
-        if (opsHeader) opsHeader.textContent = `술자 리스트 수정 — ${activeSem.name}`;
 
         displayOperators();
     } catch (error) {
@@ -583,45 +573,88 @@ async function loadOperators() {
 
 function displayOperators() {
     const container = document.getElementById('operatorsList');
-    if (operators.length === 0) {
-        container.innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-light);">등록된 술자가 없습니다.</p>';
+
+    if (semesters.length === 0) {
+        container.innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-light);">등록된 학기가 없습니다.</p>';
         return;
     }
 
-    let tableHTML = `
-        <table class="data-table">
-            <thead>
-                <tr><th>이름</th><th>학번</th><th>전화번호</th><th>타임</th><th>관리</th></tr>
-            </thead>
-            <tbody>`;
+    container.innerHTML = '';
 
-    operators.forEach(operator => {
-        const time = times.find(t => t.id === operator.time_id);
-        const timeName = time ? time.name : '미지정';
-        tableHTML += `
-            <tr>
-                <td>${operator.name || '-'}</td>
-                <td>${operator.student_id || '-'}</td>
-                <td>${operator.phone || '-'}</td>
-                <td>${timeName}</td>
-                <td>
-                    <button onclick="editOperator('${operator.id}')" style="background-color:var(--primary-color);color:white;">수정</button>
-                    <button onclick="deleteOperator('${operator.id}')" style="background-color:var(--danger);color:white;">삭제</button>
-                </td>
-            </tr>`;
+    semesters.forEach(sem => {
+        // 이 학기의 타임 목록 (최대 4개 열 표시)
+        const semTimes = times.filter(t => t.semester_id === sem.id);
+
+        const semBox = document.createElement('div');
+        semBox.style.cssText = `
+            border: 2px solid ${sem.is_active ? 'var(--primary-color)' : '#ddd'};
+            border-radius: 12px;
+            padding: 18px 20px;
+            margin-bottom: 24px;
+            background: ${sem.is_active ? '#f0f5ff' : '#fafafa'};
+        `;
+
+        // 헤더 행: 학기명 + 상태 배지
+        const statusBadge = sem.is_active
+            ? `<span style="background:var(--primary-color); color:#fff; padding:3px 10px; border-radius:20px; font-size:0.8em; font-weight:600; margin-left:10px;">✅ 활성</span>`
+            : `<span style="background:#eee; color:#999; padding:3px 10px; border-radius:20px; font-size:0.8em; margin-left:10px;">비활성</span>`;
+
+        // 타임별 술자 그리드 (4열)
+        let timesGridHtml = '';
+        if (semTimes.length === 0) {
+            timesGridHtml = `<p style="color:var(--text-light); font-size:0.85em; margin-top:12px; padding:10px 0;">등록된 타임이 없습니다.</p>`;
+        } else {
+            // 최대 4개 컬럼 그리드
+            const colWidth = semTimes.length <= 2 ? `${100 / semTimes.length}%` : '25%';
+            const gridCols = Math.min(semTimes.length, 4);
+            timesGridHtml = `
+                <div style="display:grid; grid-template-columns:repeat(${gridCols}, 1fr); gap:10px; margin-top:14px;">
+                    ${semTimes.map(time => {
+                        const timeOps = operators.filter(op => op.time_id === time.id);
+                        const opListHtml = timeOps.length === 0
+                            ? `<p style="color:#bbb; font-size:0.75em; margin:4px 0 0; font-style:italic;">없음</p>`
+                            : timeOps.map(op => `
+                                <div style="display:flex; align-items:center; justify-content:space-between; font-size:0.75em; color:#333; padding:1px 0; line-height:1.5;">
+                                    <span>${op.name || '-'} <span style="color:#888;">${op.student_id || ''}</span></span>
+                                    <span style="white-space:nowrap; margin-left:4px;">
+                                        <button onclick="editOperator('${op.id}')"
+                                            style="background:none; border:none; color:var(--primary-color); cursor:pointer; font-size:0.85em; padding:0 2px;">수정</button>
+                                        <button onclick="deleteOperator('${op.id}')"
+                                            style="background:none; border:none; color:var(--danger); cursor:pointer; font-size:0.85em; padding:0 2px;">삭제</button>
+                                    </span>
+                                </div>`).join('');
+
+                        return `
+                            <div style="background:#fff; border:1px solid #e0e8ff; border-radius:8px; padding:10px 12px; min-height:80px;">
+                                <div style="font-weight:700; font-size:0.88em; color:var(--primary-color); border-bottom:1px solid #e8eeff; padding-bottom:6px; margin-bottom:6px;">
+                                    ${time.name}
+                                    <span style="font-weight:400; color:#888; font-size:0.88em; margin-left:4px;">${time.day_of_week}요일</span>
+                                    <span style="float:right; font-size:0.8em; color:#aaa;">${timeOps.length}/12</span>
+                                </div>
+                                ${opListHtml}
+                            </div>`;
+                    }).join('')}
+                </div>`;
+        }
+
+        semBox.innerHTML = `
+            <div style="display:flex; align-items:center; margin-bottom:4px;">
+                <h3 style="margin:0; font-size:1.05em; color:#333;">${sem.name}</h3>
+                ${statusBadge}
+            </div>
+            ${timesGridHtml}`;
+
+        container.appendChild(semBox);
     });
-
-    tableHTML += `</tbody></table>`;
-    container.innerHTML = tableHTML;
 }
 
-function showAddOperatorModal() {
-    if (!selectedSemesterId) {
-        alert('활성 학기가 없습니다. 학기 관리 탭에서 학기를 활성화해주세요.');
-        return;
+async function showAddOperatorModal() {
+    if (semesters.length === 0) {
+        // 학기 캐시 없으면 로드
+        semesters = await getAllSemesters();
     }
-    if (times.length === 0) {
-        alert('먼저 타임을 추가해주세요.');
+    if (semesters.length === 0) {
+        alert('등록된 학기가 없습니다. 학기 관리 탭에서 학기를 추가해주세요.');
         return;
     }
 
@@ -631,18 +664,59 @@ function showAddOperatorModal() {
     document.getElementById('operatorStudentId').value = '';
     document.getElementById('operatorPhone').value = '';
 
-    const timeSelect = document.getElementById('operatorTimeId');
-    timeSelect.innerHTML = '';
-    times.forEach(time => {
-        const timeOperatorsCount = operators.filter(op => op.time_id === time.id).length;
-        const option = document.createElement('option');
-        option.value = time.id;
-        option.textContent = `${time.name} (${time.day_of_week}요일 ${time.time_range}) - ${timeOperatorsCount}/12명`;
-        if (timeOperatorsCount >= 12) { option.disabled = true; option.textContent += ' (정원 초과)'; }
-        timeSelect.appendChild(option);
+    // 학기 select 표시 (추가 시만)
+    const semGroup = document.getElementById('operatorSemesterGroup');
+    if (semGroup) semGroup.style.display = 'block';
+
+    // 학기 select 채우기 (최신순 = semesters 배열 순서)
+    const semSelect = document.getElementById('operatorSemesterId');
+    semSelect.innerHTML = '<option value="">학기를 선택하세요</option>';
+    semesters.forEach(sem => {
+        const opt = document.createElement('option');
+        opt.value = sem.id;
+        opt.textContent = sem.name + (sem.is_active ? ' (활성)' : '');
+        semSelect.appendChild(opt);
     });
 
+    // 타임 select 초기화
+    const timeSelect = document.getElementById('operatorTimeId');
+    timeSelect.innerHTML = '<option value="">학기를 먼저 선택하세요</option>';
+
     showModal('operatorModal');
+}
+
+// 술자 추가 모달에서 학기 선택 시 해당 학기의 타임 동적 로드
+async function onOperatorSemesterChange() {
+    const semId = document.getElementById('operatorSemesterId').value;
+    const timeSelect = document.getElementById('operatorTimeId');
+    timeSelect.innerHTML = '<option value="">타임을 선택하세요</option>';
+
+    if (!semId) {
+        timeSelect.innerHTML = '<option value="">학기를 먼저 선택하세요</option>';
+        return;
+    }
+
+    try {
+        const semTimes = await getData('times', { semester_id: semId, limit: 1000 });
+        const timesForSem = Array.isArray(semTimes) ? semTimes : [];
+
+        if (timesForSem.length === 0) {
+            timeSelect.innerHTML = '<option value="">이 학기에 타임이 없습니다</option>';
+            return;
+        }
+
+        timesForSem.forEach(time => {
+            const opCount = operators.filter(op => op.time_id === time.id).length;
+            const opt = document.createElement('option');
+            opt.value = time.id;
+            opt.textContent = `${time.name} (${time.day_of_week}요일 ${time.time_range}) — ${opCount}/12명`;
+            if (opCount >= 12) { opt.disabled = true; opt.textContent += ' (정원 초과)'; }
+            timeSelect.appendChild(opt);
+        });
+    } catch (e) {
+        console.error('타임 로드 오류:', e);
+        timeSelect.innerHTML = '<option value="">타임 로드 실패</option>';
+    }
 }
 
 function editOperator(operatorId) {
@@ -654,9 +728,19 @@ function editOperator(operatorId) {
     document.getElementById('operatorStudentId').value = currentEditingOperator.student_id || '';
     document.getElementById('operatorPhone').value = currentEditingOperator.phone || '';
 
+    // 수정 시 학기 select 숨기기 (타임만 변경 가능)
+    const semGroup = document.getElementById('operatorSemesterGroup');
+    if (semGroup) semGroup.style.display = 'none';
+
+    // 해당 술자의 학기에 속하는 타임만 표시
+    const opSemId = currentEditingOperator.semester_id;
+    const semTimesForEdit = opSemId
+        ? times.filter(t => t.semester_id === opSemId)
+        : times;
+
     const timeSelect = document.getElementById('operatorTimeId');
     timeSelect.innerHTML = '';
-    times.forEach(time => {
+    semTimesForEdit.forEach(time => {
         const option = document.createElement('option');
         option.value = time.id;
         option.textContent = `${time.name} (${time.day_of_week}요일 ${time.time_range})`;
@@ -676,6 +760,13 @@ async function saveOperator() {
     if (!name) { alert('이름을 입력해주세요.'); return; }
     if (!studentId) { alert('학번을 입력해주세요.'); return; }
     if (!phone) { alert('전화번호를 입력해주세요.'); return; }
+
+    // 추가 시에는 학기 선택 필수
+    if (!currentEditingOperator) {
+        const semId = document.getElementById('operatorSemesterId').value;
+        if (!semId) { alert('학기를 선택해주세요.'); return; }
+    }
+
     if (!timeId) { alert('타임을 선택해주세요.'); return; }
 
     if (!currentEditingOperator) {
@@ -689,11 +780,16 @@ async function saveOperator() {
     }
 
     try {
+        // 추가 시: 선택한 학기 ID / 수정 시: 기존 학기 ID 유지
+        const semId = currentEditingOperator
+            ? currentEditingOperator.semester_id
+            : document.getElementById('operatorSemesterId').value;
+
         const operatorData = {
             name, student_id: studentId,
             phone: formatPhone(phone),
             time_id: timeId,
-            semester_id: selectedSemesterId
+            semester_id: semId || selectedSemesterId
         };
 
         if (currentEditingOperator) {

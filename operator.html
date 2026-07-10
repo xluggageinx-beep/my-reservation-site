@@ -173,6 +173,23 @@
     <div id="operatorModal" class="modal">
         <div class="modal-content">
             <h3 id="operatorModalTitle">술자 추가</h3>
+
+            <!-- 학기 선택 (추가 시에만 표시) -->
+            <div class="form-group" id="operatorSemesterGroup">
+                <label for="operatorSemesterId">학기 선택</label>
+                <select id="operatorSemesterId" onchange="onOperatorSemesterChange()">
+                    <option value="">학기를 선택하세요</option>
+                </select>
+            </div>
+
+            <!-- 타임 선택 -->
+            <div class="form-group">
+                <label for="operatorTimeId">소속 타임</label>
+                <select id="operatorTimeId">
+                    <option value="">학기를 먼저 선택하세요</option>
+                </select>
+            </div>
+
             <div class="form-group">
                 <label for="operatorName">이름</label>
                 <input type="text" id="operatorName" placeholder="이름을 입력하세요">
@@ -184,10 +201,6 @@
             <div class="form-group">
                 <label for="operatorPhone">전화번호</label>
                 <input type="tel" id="operatorPhone" placeholder="010-0000-0000">
-            </div>
-            <div class="form-group">
-                <label for="operatorTimeId">소속 타임</label>
-                <select id="operatorTimeId"></select>
             </div>
             <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="saveOperator()">저장</button>
