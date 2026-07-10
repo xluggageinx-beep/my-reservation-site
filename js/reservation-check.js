@@ -466,47 +466,52 @@ function displayOperatorView() {
 
         // 상태 배지
         const statusBadge = isPast
-            ? `<span style="font-size:0.78em;padding:3px 10px;border-radius:20px;background:#eee;color:#888;font-weight:600;">완료</span>`
-            : `<span style="font-size:0.78em;padding:3px 10px;border-radius:20px;background:#e8f4ff;color:var(--primary-color);font-weight:600;">예정</span>`;
+            ? `<span style="font-size:0.78em;padding:3px 10px;border-radius:20px;background:#e8e8e8;color:#888;font-weight:600;letter-spacing:0.02em;">완료</span>`
+            : `<span style="font-size:0.78em;padding:3px 10px;border-radius:20px;background:#e8f4ff;color:var(--primary-color);font-weight:600;letter-spacing:0.02em;">예정</span>`;
 
         // 삭제 버튼 (항상 표시)
         const deleteBtn = `
             <button onclick="showCancelConfirmation('${reservation.id}', '${participantName.replace(/'/g, "\\'")}', '${reservation.reservation_date}')"
                 style="background:var(--danger);color:#fff;border:none;border-radius:8px;
-                       width:32px;height:32px;font-size:1.1em;cursor:pointer;
-                       display:flex;align-items:center;justify-content:center;flex-shrink:0;"
-                title="예약 삭제">🗑️</button>`;
+                       width:32px;height:32px;font-size:1em;cursor:pointer;
+                       display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;"
+                title="예약 삭제">✕</button>`;
+
+        // 카드 테두리/배경: 완료=회색, 예정=기본
+        const cardBorder = isPast
+            ? 'border:1.5px solid #d4d4d4;background:#f9f9f9;'
+            : 'border:1.5px solid #c7d9ff;background:#fff;';
 
         html += `
-            <div class="time-card" style="margin-bottom:14px;padding:16px 18px;${isPast ? 'opacity:0.72;' : ''}">
+            <div class="time-card" style="margin-bottom:16px;padding:20px 20px 18px;${cardBorder}${isPast ? 'opacity:0.80;' : ''}">
                 <!-- 카드 헤더 -->
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:14px;">
-                    <div style="font-size:0.95em;font-weight:700;color:${isPast ? '#888' : 'var(--primary-color)'};line-height:1.4;flex:1;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:16px;">
+                    <div style="font-size:1.05em;font-weight:700;color:${isPast ? '#888' : 'var(--primary-color)'};line-height:1.5;flex:1;">
                         ${cardTitle}
                     </div>
-                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-top:2px;">
                         ${statusBadge}
                         ${deleteBtn}
                     </div>
                 </div>
 
                 <!-- 2열 2행 상세 정보 -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;">
-                    <div style="background:#f8f9fa;border-radius:7px;padding:9px 12px;">
-                        <div style="font-size:0.72em;color:#aaa;margin-bottom:3px;">전화번호</div>
-                        <div style="font-size:0.88em;color:#333;">${phone}</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;">
+                    <div style="background:${isPast ? '#f0f0f0' : '#f0f5ff'};border-radius:7px;padding:10px 13px;">
+                        <div style="font-size:0.72em;color:#aaa;margin-bottom:4px;">전화번호</div>
+                        <div style="font-size:0.9em;color:#333;">${phone}</div>
                     </div>
-                    <div style="background:#f8f9fa;border-radius:7px;padding:9px 12px;">
-                        <div style="font-size:0.72em;color:#aaa;margin-bottom:3px;">직업</div>
-                        <div style="font-size:0.88em;color:#333;">${occupation}</div>
+                    <div style="background:${isPast ? '#f0f0f0' : '#f0f5ff'};border-radius:7px;padding:10px 13px;">
+                        <div style="font-size:0.72em;color:#aaa;margin-bottom:4px;">직업</div>
+                        <div style="font-size:0.9em;color:#333;">${occupation}</div>
                     </div>
-                    <div style="background:#f8f9fa;border-radius:7px;padding:9px 12px;">
-                        <div style="font-size:0.72em;color:#aaa;margin-bottom:3px;">주소</div>
-                        <div style="font-size:0.88em;color:#333;word-break:break-all;">${address}</div>
+                    <div style="background:${isPast ? '#f0f0f0' : '#f0f5ff'};border-radius:7px;padding:10px 13px;">
+                        <div style="font-size:0.72em;color:#aaa;margin-bottom:4px;">주소</div>
+                        <div style="font-size:0.9em;color:#333;word-break:break-all;">${address}</div>
                     </div>
-                    <div style="background:#f8f9fa;border-radius:7px;padding:9px 12px;">
-                        <div style="font-size:0.72em;color:#aaa;margin-bottom:3px;">관계</div>
-                        <div style="font-size:0.88em;color:#333;">${relationship}</div>
+                    <div style="background:${isPast ? '#f0f0f0' : '#f0f5ff'};border-radius:7px;padding:10px 13px;">
+                        <div style="font-size:0.72em;color:#aaa;margin-bottom:4px;">관계</div>
+                        <div style="font-size:0.9em;color:#333;">${relationship}</div>
                     </div>
                 </div>
             </div>`;
