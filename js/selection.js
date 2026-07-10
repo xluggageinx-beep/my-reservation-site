@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadTimesAndOperators();
 });
 
-// 타임과 술자 데이터 로드
+// 타임과 술자 데이터 로드 (활성 학기 기반)
 async function loadTimesAndOperators() {
     const container = document.getElementById('timesContainer');
     if (!container) {
@@ -33,18 +33,27 @@ async function loadTimesAndOperators() {
     try {
         console.log('타임/술자 데이터 로드 시작...');
 
+        // ── 활성 학기 조회 ──────────────────────────
+        const activeSem = await getActiveSemester();
+        if (!activeSem) {
+            showError('timesContainer', '현재 활성화된 학기가 없습니다. 관리자에게 문의해주세요.');
+            return;
+        }
+        console.log('활성 학기:', activeSem.name);
+
+        // ── 활성 학기의 타임/술자만 로드 ────────────
         const timesResponse = await getData('times', {
+            semester_id: activeSem.id,
             limit: 1000
         });
         console.log('times 응답:', timesResponse);
-
         times = Array.isArray(timesResponse) ? timesResponse : [];
 
         const operatorsResponse = await getData('operators', {
+            semester_id: activeSem.id,
             limit: 1000
         });
         console.log('operators 응답:', operatorsResponse);
-
         operators = Array.isArray(operatorsResponse) ? operatorsResponse : [];
 
         try {

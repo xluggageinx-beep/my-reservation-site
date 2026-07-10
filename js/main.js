@@ -271,3 +271,80 @@ document.addEventListener("click", function(e) {
         hideModal(e.target.id);
     }
 });
+
+// -------------------------------
+// 학기(Semester) 유틸
+// -------------------------------
+
+/**
+ * 활성 학기 1개를 반환합니다.
+ * is_active = true 인 행이 없으면 null 반환.
+ */
+async function getActiveSemester() {
+    const rows = await getData('semesters', {
+        is_active: true,
+        limit: 1
+    });
+    return rows.length > 0 ? rows[0] : null;
+}
+
+/**
+ * 모든 학기 목록을 최신순으로 반환합니다.
+ */
+async function getAllSemesters() {
+    return await getData('semesters', {
+        order: 'created_at.desc',
+        limit: 100
+    });
+}
+
+/**
+ * 학기를 생성합니다.
+ * @param {string} name  예: "2025-1학기"
+ */
+async function createSemester(name) {
+    const data = {
+        id: generateUUID(),
+        name: name,
+        is_active: false
+    };
+    return await createData('semesters', data);
+}
+
+/**
+ * 특정 학기를 활성화합니다.
+ * 기존 활성 학기들을 모두 비활성화한 뒤 대상 학기를 활성화합니다.
+ * @param {string} semesterId
+ */
+async function activateSemester(semesterId) {
+    // 기존 활성 학기 전체 비활성화
+    const activeSemesters = await getData('semesters', { is_active: true, limit: 100 });
+    for (const sem of activeSemesters) {
+        if (sem.id !== semesterId) {
+            await updateData('semesters', sem.id, { is_active: false });
+        }
+    }
+    // 대상 학기 활성화
+    return await updateData('semesters', semesterId, { is_active: true });
+}
+
+/**
+ * 특정 학기를 비활성화합니다.
+ * @param {string} semesterId
+ */
+async function deactivateSemester(semesterId) {
+    return await updateData('semesters', semesterId, { is_active: false });
+}
+
+/**
+ * 특정 학기를 삭제합니다.
+ * 해당 학기에 속한 times/operators가 있으면 삭제 거부.
+ * @param {string} semesterId
+ */
+async function deleteSemester(semesterId) {
+    const linkedTimes = await getData('times', { semester_id: semesterId, limit: 1 });
+    if (linkedTimes.length > 0) {
+        throw new Error('이 학기에 속한 타임이 있습니다. 먼저 타임을 삭제해주세요.');
+    }
+    return await deleteData('semesters', semesterId);
+}

@@ -30,16 +30,34 @@
 
             <!-- 관리 섹션 (인증 후 표시) -->
             <div id="manageSection" style="display: none;">
+                <!-- 활성 학기 배지 -->
+                <div style="text-align:center; margin-bottom:15px;">
+                    <span id="activeSemesterBadge" style="font-size:0.95em; font-weight:600; color:var(--text-light);">학기 로딩 중...</span>
+                </div>
+
                 <div class="button-group" style="margin-bottom: 40px;">
-                    <button class="btn btn-primary" onclick="showTimesManagement()">타임 수정</button>
+                    <button class="btn btn-primary" onclick="showSemestersManagement()">학기 관리</button>
+                    <button class="btn btn-secondary" onclick="showTimesManagement()">타임 수정</button>
                     <button class="btn btn-secondary" onclick="showOperatorsManagement()">술자 리스트 수정</button>
                     <button class="btn btn-secondary" onclick="showReservationsManagement()">예약 관리</button>
                     <button class="btn btn-secondary" onclick="navigateToReservationCheck()">예약 정보 확인</button>
                 </div>
 
+                <!-- 학기 관리 -->
+                <div id="semestersManagement" style="display: none;">
+                    <h3 style="color: var(--primary-color); margin-bottom: 20px;">학기 관리</h3>
+
+                    <div class="form-group">
+                        <button class="btn btn-primary" onclick="showAddSemesterModal()">학기 추가</button>
+                        <span style="margin-left:15px; color:var(--text-light); font-size:0.9em;">학기를 추가하고 활성화하면 해당 학기의 타임/술자만 예약 페이지에 표시됩니다.</span>
+                    </div>
+
+                    <div id="semestersList"></div>
+                </div>
+
                 <!-- 타임 수정 -->
                 <div id="timesManagement" style="display: none;">
-                    <h3 style="color: var(--primary-color); margin-bottom: 20px;">타임 수정</h3>
+                    <h3 id="timesManagementHeader" style="color: var(--primary-color); margin-bottom: 20px;">타임 수정</h3>
                     
                     <div class="form-group">
                         <button class="btn btn-primary" onclick="showAddTimeModal()" id="addTimeBtn">타임 추가</button>
@@ -51,7 +69,7 @@
 
                 <!-- 술자 리스트 수정 -->
                 <div id="operatorsManagement" style="display: none;">
-                    <h3 style="color: var(--primary-color); margin-bottom: 20px;">술자 리스트 수정</h3>
+                    <h3 id="operatorsManagementHeader" style="color: var(--primary-color); margin-bottom: 20px;">술자 리스트 수정</h3>
                     
                     <div class="form-group">
                         <button class="btn btn-primary" onclick="showAddOperatorModal()">술자 추가</button>
@@ -78,6 +96,21 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- 학기 추가 모달 -->
+    <div id="semesterModal" class="modal">
+        <div class="modal-content">
+            <h3>학기 추가</h3>
+            <div class="form-group">
+                <label for="semesterName">학기 이름</label>
+                <input type="text" id="semesterName" placeholder="예: 2025-2학기">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="saveSemester()">저장</button>
+                <button class="btn btn-secondary" onclick="closeSemesterModal()">취소</button>
+            </div>
+        </div>
     </div>
 
     <!-- 타임 추가/수정 모달 -->
