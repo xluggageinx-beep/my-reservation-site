@@ -283,11 +283,18 @@ function updateActiveSemesterBadge() {
 async function handleActivateSemester(semesterId) {
     const sem = semesters.find(s => s.id === semesterId);
     if (!sem) return;
-    if (!confirm(`"${sem.name}"을 활성 학기로 설정하시겠습니까?\n기존 활성 학기는 자동으로 비활성화됩니다.`)) return;
+
+    const activeOthers = semesters.filter(s => s.is_active && s.id !== semesterId);
+    const msg = activeOthers.length > 0
+        ? `"${sem.name}"을 활성 학기로 추가하시겠습니까?\n현재 활성 학기: ${activeOthers.map(s => s.name).join(', ')}\n(복수 활성화가 허용됩니다)`
+        : `"${sem.name}"을 활성 학기로 설정하시겠습니까?`;
+
+    if (!confirm(msg)) return;
     try {
-        await activateSemester(semesterId);
+        // 기존 활성 학기를 건드리지 않고 이 학기만 활성화
+        await updateData('semesters', semesterId, { is_active: true });
         selectedSemesterId = semesterId;
-        alert(`"${sem.name}"이 활성 학기로 설정되었습니다.`);
+        alert(`"${sem.name}"이 활성 학기로 추가되었습니다.`);
         await loadSemesters();
     } catch (error) {
         console.error('학기 활성화 오류:', error);
@@ -898,39 +905,123 @@ function navigateToReservationCheck() {
 
 async function loadReservationsSummary() {
     try {
-        const response = await getData('reservations', { limit: 5000 });
-        const reservations = Array.isArray(response) ? response : [];
+        // 전체 데이터 로드
+        const [allSems, allTimesRaw, allOpsRaw, allReservationsRaw] = await Promise.all([
+            getAllSemesters(),
+            getData('times',        { limit: 1000 }),
+            getData('operators',    { limit: 1000 }),
+            getData('reservations', { limit: 5000 })
+        ]);
 
+        const allTimes2        = Array.isArray(allTimesRaw)        ? allTimesRaw        : [];
+        const allOps2          = Array.isArray(allOpsRaw)          ? allOpsRaw          : [];
+        const allReservations2 = Array.isArray(allReservationsRaw) ? allReservationsRaw : [];
+
+        // 전체 예약 수 뱃지
         const countElement = document.getElementById('currentReservationCount');
-        if (countElement) countElement.textContent = reservations.length;
+        if (countElement) countElement.textContent = allReservations2.length;
 
         const summaryContainer = document.getElementById('reservationsSummary');
         if (!summaryContainer) return;
 
-        if (reservations.length === 0) {
+        if (allReservations2.length === 0 && allSems.length === 0) {
             summaryContainer.innerHTML = `<div class="notice-box" style="text-align:center; padding:40px;"><p>현재 예약이 없습니다.</p></div>`;
             return;
         }
 
-        const allTimes = Array.isArray(await getData('times', { limit: 1000 })) ? await getData('times', { limit: 1000 }) : [];
-        const timeStats = {};
-        reservations.forEach(r => {
-            const time = allTimes.find(t => t.id === r.time_id);
-            const timeName = time ? time.name : '알수없음';
-            if (!timeStats[timeName]) timeStats[timeName] = 0;
-            timeStats[timeName]++;
+        // operator_id → time_id 맵
+        const opTimeMap = {};
+        allOps2.forEach(op => { opTimeMap[op.id] = op.time_id; });
+
+        // time_id → semester_id 맵
+        const timeSemMap = {};
+        allTimes2.forEach(t => { timeSemMap[t.id] = t.semester_id; });
+
+        // 학기별 처리 (최신순)
+        let html = '';
+
+        allSems.forEach(sem => {
+            const isActive = sem.is_active;
+            const semTimes = allTimes2.filter(t => t.semester_id === sem.id);
+
+            // 이 학기에 속한 예약 (operator → time → semester 경로)
+            const semReservations = allReservations2.filter(r => {
+                const tid = opTimeMap[r.operator_id] || r.time_id;
+                return timeSemMap[tid] === sem.id;
+            });
+
+            // 색상 테마
+            const borderColor = isActive ? 'var(--primary-color)' : '#ccc';
+            const bgColor     = isActive ? '#f0f5ff' : '#f8f8f8';
+            const titleColor  = isActive ? 'var(--primary-color)' : '#888';
+            const badgeHtml   = isActive
+                ? `<span style="background:var(--primary-color);color:#fff;padding:2px 10px;border-radius:20px;font-size:0.78em;font-weight:600;margin-left:8px;">활성</span>`
+                : `<span style="background:#ddd;color:#888;padding:2px 10px;border-radius:20px;font-size:0.78em;margin-left:8px;">비활성</span>`;
+
+            // 타임별 예약 수
+            let timeCols = '';
+            if (semTimes.length === 0) {
+                timeCols = `<p style="color:#bbb;font-size:0.85em;margin:8px 0 0;">등록된 타임 없음</p>`;
+            } else {
+                const gridCols = Math.min(semTimes.length, 4);
+                timeCols = `<div style="display:grid;grid-template-columns:repeat(${gridCols},1fr);gap:10px;margin-top:12px;">`;
+                semTimes.forEach(time => {
+                    const timeReservations = semReservations.filter(r => {
+                        const tid = opTimeMap[r.operator_id] || r.time_id;
+                        return tid === time.id;
+                    });
+                    const cnt = timeReservations.length;
+                    timeCols += `
+                        <div style="padding:12px;background:#fff;border:1px solid ${isActive ? '#c7d9ff' : '#e0e0e0'};border-radius:8px;text-align:center;">
+                            <div style="font-weight:600;font-size:0.88em;color:${titleColor};margin-bottom:4px;">${time.name}</div>
+                            <div style="font-size:0.78em;color:#999;margin-bottom:8px;">${time.day_of_week}요일 ${time.time_range}</div>
+                            <div style="font-size:1.4em;font-weight:700;color:${isActive ? 'var(--primary-color)' : '#aaa'};">${cnt}<span style="font-size:0.55em;font-weight:400;margin-left:2px;">건</span></div>
+                        </div>`;
+                });
+                timeCols += `</div>`;
+            }
+
+            html += `
+                <div style="border:2px solid ${borderColor};border-radius:12px;padding:16px 20px;margin-bottom:20px;background:${bgColor};">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+                        <div style="display:flex;align-items:center;">
+                            <h4 style="margin:0;color:${titleColor};font-size:1em;">${sem.name} 타임별 예약 현황</h4>
+                            ${badgeHtml}
+                        </div>
+                        <div style="font-size:0.88em;color:${isActive ? 'var(--primary-color)' : '#999'};font-weight:600;">
+                            학기 총 <strong>${semReservations.length}</strong>건
+                        </div>
+                    </div>
+                    ${timeCols}
+                </div>`;
         });
 
-        let html = '<div class="time-card"><h4 style="color:var(--primary-color);">타임별 예약 현황</h4>';
-        html += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:15px; margin-top:15px;">';
-        for (const [timeName, count] of Object.entries(timeStats)) {
-            html += `<div style="padding:15px; background:#f8f9fa; border-radius:5px; text-align:center;">
-                <div style="font-weight:600; margin-bottom:5px;">${timeName}</div>
-                <div style="font-size:1.5em; color:var(--primary-color);">${count}건</div>
-            </div>`;
+        // 학기 미분류 예약 (semester_id 없는 times에 속한 예약)
+        const classifiedReservationIds = new Set();
+        allSems.forEach(sem => {
+            const semTimes = allTimes2.filter(t => t.semester_id === sem.id);
+            allReservations2.forEach(r => {
+                const tid = opTimeMap[r.operator_id] || r.time_id;
+                if (semTimes.some(t => t.id === tid)) classifiedReservationIds.add(r.id);
+            });
+        });
+        const unclassified = allReservations2.filter(r => !classifiedReservationIds.has(r.id));
+        if (unclassified.length > 0) {
+            html += `
+                <div style="border:1px dashed #ccc;border-radius:12px;padding:14px 18px;margin-bottom:16px;background:#fafafa;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <h4 style="margin:0;color:#999;font-size:0.95em;">학기 미분류 예약</h4>
+                        <span style="font-size:0.88em;color:#aaa;">총 ${unclassified.length}건</span>
+                    </div>
+                </div>`;
         }
-        html += '</div></div>';
-        summaryContainer.innerHTML = html;
+
+        if (!html) {
+            summaryContainer.innerHTML = `<div class="notice-box" style="text-align:center; padding:40px;"><p>현재 예약이 없습니다.</p></div>`;
+        } else {
+            summaryContainer.innerHTML = html;
+        }
+
     } catch (error) {
         console.error('예약 요약 로드 오류:', error);
         const el = document.getElementById('reservationsSummary');
