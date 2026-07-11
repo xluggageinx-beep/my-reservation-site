@@ -5,13 +5,14 @@ const ADMIN_KEYWORD = '관리자';
 
 let viewMode = null; // 'operator', 'rs', 'admin'
 let currentOperator = null;   // 단일 술자 (레거시, RS/admin에서만 사용)
-let currentOperators = [];    // 복수 술자 (활성 학기 내 동일 학생)
+let currentOperators = [];    // 전체 학기 내 동일 이름+학번 술자 목록
 let currentTime = null;
 let currentReservations = [];
 let currentCancelReservationId = null;
 let allOperators = [];
 let allTimes = [];
 let allSemesters = []; // 학기 목록 캐시
+let selectedOperatorSemesterIds = []; // 술자 모드: 현재 선택된 학기 ID 목록
 
 // -------------------------------
 // 공통 유틸
@@ -141,33 +142,25 @@ async function checkReservations() {
             const inputName = normalizeText(nameInput);
             const inputStudentId = normalizeDigits(codeInput);
 
-            // 활성 학기 ID 목록
-            const activeSemIds = new Set(allSemesters.filter(s => s.is_active).map(s => s.id));
-
-            // 활성 학기 내 타임 ID 목록
-            const activeTimeIds = activeSemIds.size > 0
-                ? new Set(allTimes.filter(t => activeSemIds.has(t.semester_id)).map(t => t.id))
-                : null; // null이면 전체 허용 (학기 정보 없을 때 폴백)
-
-            // 활성 학기 범위 내에서 이름+학번 매칭 술자 전체
+            // 전체 학기에서 이름+학번 매칭 술자 검색 (학기 제한 없음)
             currentOperators = allOperators.filter(op => {
                 const opName = normalizeText(op.name);
                 const opStudentId = normalizeDigits(op.student_id);
-                const nameMatch = opName === inputName && opStudentId === inputStudentId;
-                if (!nameMatch) return false;
-                if (activeTimeIds === null) return true;
-                return activeTimeIds.has(op.time_id);
+                return opName === inputName && opStudentId === inputStudentId;
             });
 
             if (currentOperators.length === 0) {
-                alert('활성 학기에서 일치하는 술자 정보를 찾을 수 없습니다.\n이름과 학번을 확인해주세요.');
+                alert('일치하는 술자 정보를 찾을 수 없습니다.\n이름과 학번을 확인해주세요.');
                 return;
             }
 
             // 레거시 단일 참조 유지
             currentOperator = currentOperators[0];
             viewMode = 'operator';
-            displayOperatorView();
+
+            // 학기 선택 UI 표시 (authSection 유지, semesterSection 표시)
+            displaySemesterSelector(currentOperators);
+            return; // 학기 선택 후 displayOperatorView 호출
         }
 
         document.getElementById('authSection').style.display = 'none';
@@ -177,6 +170,132 @@ async function checkReservations() {
         console.error('예약 조회 오류:', error);
         alert('예약 정보를 불러오는 중 오류가 발생했습니다.');
     }
+}
+
+// -------------------------------
+// 학기 선택 UI (술자 모드)
+// -------------------------------
+function displaySemesterSelector(operators) {
+    // 술자가 등록된 학기 ID 수집
+    const operatorSemIds = new Set(
+        operators.map(op => op.semester_id).filter(Boolean)
+    );
+
+    // 해당 학기만 추출, 생성일 내림차순 (allSemesters는 이미 created_at.desc)
+    const relatedSemesters = allSemesters.filter(s => operatorSemIds.has(s.id));
+
+    // 학기 정보가 없을 경우 폴백: 전체 학기 기준 표시
+    const displaySemesters = relatedSemesters.length > 0 ? relatedSemesters : allSemesters.slice(0, 5);
+
+    // 활성 학기 ID Set
+    const activeSemIds = new Set(allSemesters.filter(s => s.is_active).map(s => s.id));
+
+    // 활성 학기 기본 선택
+    const defaultSelected = displaySemesters
+        .filter(s => activeSemIds.has(s.id))
+        .map(s => s.id);
+    selectedOperatorSemesterIds = defaultSelected.length > 0
+        ? defaultSelected
+        : (displaySemesters.length > 0 ? [displaySemesters[0].id] : []);
+
+    // 학기 선택 섹션 렌더링
+    const semesterSection = document.getElementById('semesterSection');
+    if (!semesterSection) return;
+
+    const first = operators[0];
+
+    semesterSection.innerHTML = `
+        <div style="background:#f0f5ff;border:1.5px solid #c7d9ff;border-radius:12px;padding:20px 20px 16px;margin-bottom:20px;">
+            <div style="margin-bottom:4px;">
+                <span style="font-size:1.1em;font-weight:700;color:var(--primary-color);">${first.name}</span>
+                <span style="font-size:0.9em;color:#666;margin-left:8px;">(${first.student_id})</span>
+            </div>
+            <div style="font-size:0.82em;color:#888;margin-bottom:16px;">등록된 학기를 선택하면 해당 학기의 예약이 표시됩니다. 복수 선택 가능합니다.</div>
+            <div id="semesterButtons" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+                ${displaySemesters.map(sem => {
+                    const isActive = activeSemIds.has(sem.id);
+                    const isSelected = selectedOperatorSemesterIds.includes(sem.id);
+                    return `
+                        <button
+                            id="semBtn_${sem.id}"
+                            onclick="toggleSemesterSelection('${sem.id}')"
+                            style="
+                                padding:8px 16px;
+                                border-radius:20px;
+                                border:2px solid ${isActive ? '#3b82f6' : '#d1d5db'};
+                                background:${isSelected ? (isActive ? '#3b82f6' : '#374151') : (isActive ? '#eff6ff' : '#f9fafb')};
+                                color:${isSelected ? '#fff' : (isActive ? '#1d4ed8' : '#374151')};
+                                font-size:0.9em;
+                                font-weight:${isActive ? '700' : '500'};
+                                cursor:pointer;
+                                transition:all 0.15s;
+                                display:inline-flex;
+                                align-items:center;
+                                gap:6px;
+                            "
+                        >
+                            ${sem.name}
+                            ${isActive ? '<span style="font-size:0.72em;background:' + (isSelected ? 'rgba(255,255,255,0.25)' : '#3b82f6') + ';color:#fff;padding:2px 6px;border-radius:10px;font-weight:700;">활성</span>' : ''}
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+            <button
+                onclick="applyOperatorSemesterFilter()"
+                style="width:100%;padding:11px;background:var(--primary-color);color:#fff;border:none;border-radius:8px;font-size:1em;font-weight:700;cursor:pointer;"
+            >
+                선택한 학기 예약 보기
+            </button>
+        </div>
+    `;
+
+    semesterSection.style.display = 'block';
+}
+
+function toggleSemesterSelection(semId) {
+    const idx = selectedOperatorSemesterIds.indexOf(semId);
+    if (idx === -1) {
+        selectedOperatorSemesterIds.push(semId);
+    } else {
+        if (selectedOperatorSemesterIds.length === 1) return; // 최소 1개 유지
+        selectedOperatorSemesterIds.splice(idx, 1);
+    }
+
+    // 활성 학기 판별
+    const activeSemIds = new Set(allSemesters.filter(s => s.is_active).map(s => s.id));
+
+    // 버튼 스타일 갱신
+    selectedOperatorSemesterIds.forEach(_id => {
+        // 다시 전체 버튼 순회로 갱신
+    });
+
+    // 전체 학기 버튼 재렌더 (allSemesters 참조)
+    allSemesters.forEach(sem => {
+        const btn = document.getElementById(`semBtn_${sem.id}`);
+        if (!btn) return;
+        const isActive = activeSemIds.has(sem.id);
+        const isSelected = selectedOperatorSemesterIds.includes(sem.id);
+        btn.style.border = `2px solid ${isActive ? '#3b82f6' : '#d1d5db'}`;
+        btn.style.background = isSelected ? (isActive ? '#3b82f6' : '#374151') : (isActive ? '#eff6ff' : '#f9fafb');
+        btn.style.color = isSelected ? '#fff' : (isActive ? '#1d4ed8' : '#374151');
+        // 활성 뱃지 색상 갱신
+        const badge = btn.querySelector('span');
+        if (badge) {
+            badge.style.background = isSelected ? 'rgba(255,255,255,0.25)' : '#3b82f6';
+        }
+    });
+}
+
+function applyOperatorSemesterFilter() {
+    if (selectedOperatorSemesterIds.length === 0) {
+        alert('학기를 하나 이상 선택해주세요.');
+        return;
+    }
+    document.getElementById('authSection').style.display = 'none';
+    document.getElementById('semesterSection').style.display = 'none';
+    document.getElementById('reservationsSection').style.display = 'block';
+    displayOperatorView();
+    updateExportButtonVisibility();
 }
 
 // -------------------------------
@@ -397,34 +516,43 @@ function calcKoreanAge(birthdateStr) {
 // 술자 개인 뷰
 // -------------------------------
 function displayOperatorView() {
-    // currentOperators 배열(활성 학기 내 동일 이름+학번) 전체를 표시
-    const operators = currentOperators.length > 0 ? currentOperators : (currentOperator ? [currentOperator] : []);
+    const allMatchedOperators = currentOperators.length > 0 ? currentOperators : (currentOperator ? [currentOperator] : []);
+
+    // 선택된 학기에 속하는 술자만 필터링
+    const operators = selectedOperatorSemesterIds.length > 0
+        ? allMatchedOperators.filter(op => selectedOperatorSemesterIds.includes(op.semester_id))
+        : allMatchedOperators;
+
+    // 표시할 술자가 없으면 전체로 폴백
+    const displayOperators = operators.length > 0 ? operators : allMatchedOperators;
 
     // 헤더: 첫 번째 술자 기준
-    const first = operators[0];
-    const firstTime = allTimes.find(t => t.id === first.time_id);
-    const firstSem  = allSemesters.find(s => s.id === first.semester_id);
+    const first = displayOperators[0];
 
-    const semLabels = operators.map(op => {
+    // 선택된 학기명 레이블
+    const selectedSemLabels = displayOperators.map(op => {
         const sem = allSemesters.find(s => s.id === op.semester_id);
         const t   = allTimes.find(t => t.id === op.time_id);
-        return sem ? `${sem.name} ${t ? t.name : ''}` : (t ? t.name : '');
+        return sem ? `${sem.name}${t ? ' ' + t.name : ''}` : (t ? t.name : '');
     }).filter(Boolean);
+
+    // 중복 제거
+    const uniqueLabels = [...new Set(selectedSemLabels)];
 
     document.getElementById('viewerInfo').innerHTML = `
         <p style="font-size: 1.2em; margin: 0;">
             <strong>${first.name}</strong> (${first.student_id})
         </p>
         <p style="margin: 8px 0 0 0; color: var(--text-light); font-size:0.9em;">
-            ${semLabels.join(' · ')}
+            ${uniqueLabels.join(' · ')}
         </p>
     `;
 
     document.getElementById('listTitle').textContent = '내 예약 목록';
     const container = document.getElementById('reservationsList');
 
-    // 모든 매칭 술자의 예약 수집
-    const operatorIds = new Set(operators.map(op => op.id));
+    // 선택된 학기 술자들의 예약 수집
+    const operatorIds = new Set(displayOperators.map(op => op.id));
     const allOpReservations = currentReservations.filter(r => operatorIds.has(r.operator_id));
 
     if (allOpReservations.length === 0) {
@@ -657,12 +785,15 @@ function resetSearch() {
     document.getElementById('codeInput').value = '';
     document.getElementById('authSection').style.display = 'block';
     document.getElementById('reservationsSection').style.display = 'none';
+    const semSec = document.getElementById('semesterSection');
+    if (semSec) semSec.style.display = 'none';
 
     viewMode = null;
     currentOperator = null;
     currentOperators = [];
     currentTime = null;
     currentReservations = [];
+    selectedOperatorSemesterIds = [];
     updateExportButtonVisibility();
 }
 
