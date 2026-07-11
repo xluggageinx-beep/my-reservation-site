@@ -94,6 +94,13 @@ async function renderSemesterPreview() {
 
     try {
         const allSemesters = await getAllSemesters();
+
+        // 전역 semesters 캐시 업데이트 및 badge 갱신
+        if (allSemesters.length > 0 && semesters.length === 0) {
+            semesters = allSemesters;
+        }
+        updateActiveSemesterBadge();
+
         if (allSemesters.length === 0) {
             container.innerHTML = '<p style="color:var(--text-light); font-size:0.85em; padding:8px 0;">등록된 학기가 없습니다.</p>';
             return;
@@ -609,6 +616,8 @@ async function loadOperators() {
         if (semesters.length === 0) {
             semesters = await getAllSemesters();
         }
+        // 학기 로드 후 badge 즉시 갱신
+        updateActiveSemesterBadge();
 
         // 전체 타임/술자 로드
         const timesResponse = await getData('times', { limit: 1000 });
